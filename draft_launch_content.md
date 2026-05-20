@@ -45,80 +45,74 @@ hermes skills tap add JOHNNYMACONNY/mighty-router
 hermes skills install mighty-router
 ```
 
----
-
 ## 3. Twitter/X Launch Thread Copy
 
-### Tweet 1 (Hook) 🪝
-> AI coding agents are awesome, but they fall into two traps:
-> 1. Wasting 10k tokens planning a 1-line edit (Verbosity Trap)
-> 2. Bypassing safety planning and writing buggy code to critical database schemas (Bypass Trap)
+### Tweet 1 (The Hook) 🪝
+> Ever get frustrated when your AI coding tool:
+> 1. Wastes 2 minutes writing a giant plan for a simple 1-line change? (Time/Money bloat)
+> 2. Recklessly writes code into critical files without double-checking? (Regressions)
 > 
-> I built a solution: Mighty Router. 🧵👇
+> I built a simple background router to fix this. Meet Mighty Router. 🧵👇
 
-### Tweet 2 (The Solution) ⚡
-> Mighty Router is a lightweight, risk-based prompt routing framework for Cursor, Windsurf, Aider, and CLI agents (Hermes, Codex, OpenClaw).
+### Tweet 2 (How it Works) ⚡
+> Mighty Router sits behind your AI (Cursor, Windsurf, Aider, CLI agents) and automatically changes its behavior based on the task:
 > 
-> It dynamically routes task requests into 4 distinct execution profiles:
-> 
-> 🔴 LIGHT (Minimal tokens - no edits)
-> 🟢 VERIFY (UAT checks & audits)
-> 🟡 STANDARD (Routine edits - 1 sentence plan)
-> 🔵 FORENSIC (Complex edits - full XML safety gates)
+> 🔴 Light: For simple questions. Tells the AI to reply in ultra-short text. (Saves 90% in tokens!)
+> 🟢 Verify: For checking tests. Tells the AI to only inspect logs.
+> 🟡 Standard: For routine edits. Requires a simple 1-sentence plan.
+> 🔵 Forensic: For database or API changes. Enforces planning and safety reviews.
 
-### Tweet 3 (Auto-Escalation) 🚀
-> It supports a project-level `.mightyrc` configuration file.
+### Tweet 3 (Set-and-Forget Auto-Escalation) 🛠️
+> You can place a `.mightyrc` file in your workspace containing sensitive folders (like `db/` or `auth/`). 
 > 
-> If a developer request targets any high-risk file path (like schemas, credentials, gateways, or SOUL.md), the agent automatically escalates its logic to FORENSIC planning.
+> If the AI tries to modify them, Mighty Router automatically escalates the AI's logic to the Forensic (strict safety) profile. 
 > 
-> Safe edits on critical files, lightning-fast edits everywhere else.
+> Fast edits everywhere, strict safety where it counts.
 
 ### Tweet 4 (Outro & Link) 🔗
-> Clean, modular, and works out of the box with an automated system installer.
+> Easy global installer to set it up across all your local tools in one click.
 > 
-> Check out the open-source code and templates here:
+> Check out the open-source code and drop-in templates here:
 > 👉 https://github.com/JOHNNYMACONNY/mighty-router
 
 ---
 
 ## 4. Reddit Post Copy (`r/LocalLLaMA`, `r/Cursor`, `r/cline`)
 
-**Title:** Show r/Cursor: Mighty Router – Stop your AI coding agents from wasting tokens on simple edits (and breaking critical schemas)
+**Title:** Show r/Cursor: Mighty Router – Stop your AI coding tools from wasting tokens (and breaking important files)
 
 > Hey everyone,
 >
-> If you use AI coding tools like Cursor, Windsurf, Aider, or CLI agents (Hermes, OpenClaw, Codex), you’ve probably noticed two recurring issues:
+> If you use AI coding assistants like Cursor, Windsurf, Aider, or CLI agents, you've probably noticed two annoying habits:
 >
-> 1. **The Verbosity Trap:** The agent wastes thousands of tokens writing complex planning blocks, system audits, and verification logs for a simple 1-line refactor or a question.
-> 2. **The Bypass Trap:** For a complex database schema change, the agent rushes ahead and edits files directly without thinking through safety checks, introducing regressions.
+> 1. **The Verbosity Trap:** You ask a simple question, and the AI spends minutes writing out a massive, expensive explanation/plan you didn't need.
+> 2. **The Bypass Trap:** You ask the AI to change a critical part of your app, and it rushes ahead, editing files directly without double-checking or running tests, causing bugs.
 >
-> To solve this, I built **Mighty Router**—a lightweight, risk-based execution profiling framework.
+> To fix this, I built **Mighty Router**—a simple, risk-based routing system that instructs your AI to dynamically change its behavior based on the risk of your request.
 >
-> ### How it works
-> It routes user requests dynamically into 4 distinct profiles based on task complexity:
+> ### The 4 Profiles
+> * **`MIGHTY-LIGHT`** (Questions): The AI is restricted from editing code and must respond in short, telegraphic sentences. (Saves up to 90% in token costs).
+> * **`MIGHTY-VERIFY`** (Checking Tests): The AI is instructed to only inspect log outputs on disk and return a checklist of findings.
+> * **`MIGHTY-STANDARD`** (Routine Tweaks): AI requires a simple 1-sentence plain text plan before making any code changes.
+> * **`MIGHTY-FORENSIC`** (Critical Changes): Automatically triggered for sensitive paths. AI is forced into a full-scale planning, testing, and auditing flow.
 >
-> * **`MIGHTY-LIGHT`** (Questions & Explanations): Zero code edits allowed. The agent responds in brief, telegraphic text. Saves 90%+ in token overhead.
-> * **`MIGHTY-VERIFY`** (Auditing & Tests): No code edits. Agent inspects test runs on disk and returns a concise checklist of evidence.
-> * **`MIGHTY-STANDARD`** (Routine Changes): Routine edits. Requires a simple 1-to-3 sentence plain text plan.
-> * **`MIGHTY-FORENSIC`** (Critical Changes): Triggered automatically for sensitive files (database schemas, gateways, credentials, credentials). Enforces strict XML tags, adversarial planning, and post-action verification.
->
-> ### Project-Specific Escalation (`.mightyrc`)
-> You can place a `.mightyrc` file in your workspace root specifying sensitive paths. If the agent detects edits targeting these paths, it automatically escalates to the `MIGHTY-FORENSIC` gate:
+> ### Dynamic Auto-Escalation (`.mightyrc`)
+> Place a `.mightyrc` file in your project root with your database or API paths. If the AI targets these directories, it automatically switches to `MIGHTY-FORENSIC` to prevent bugs:
 >
 > ```json
 > {
->   "high_risk_paths": ["db/", "gateway/", "credentials", "SOUL.md"]
+>   "high_risk_paths": ["db/", "gateway/", "credentials"]
 > }
 > ```
 >
-> ### Easy Global Setup
-> The repo comes with an automated shell script that auto-detects and symlinks the skill globally across your CLI tools, alongside ready-to-use template files for `.cursorrules`, `.windsurfrules`, `.clinerules`, and `.aider.instructions.md`.
+> ### How to Install
+> 1. Clone the repository.
+> 2. Run `./install.sh`. The script auto-detects your local AI agents (Hermes, Codex, OpenClaw, Gemini, VS Code Copilot) and links the skills.
+> 3. Use the templates in `templates/` to drop directly into Cursor (`.cursorrules`), Windsurf, Claude Code, or Aider.
 >
-> Open source, free, and MIT licensed.
+> It’s open source, free, and MIT licensed. Let me know what you think!
 >
 > **GitHub Link:** https://github.com/JOHNNYMACONNY/mighty-router
->
-> Let me know what you think or if you have ideas on expanding the profiles!
 
 ---
 
@@ -126,14 +120,15 @@ hermes skills install mighty-router
 
 **Title:** Show HN: Mighty Router – Risk-based prompt routing for coding agents
 
-> AI coding agents are highly capable but terribly inefficient. They either spend thousands of tokens writing long-winded plans for a simple 1-line refactor, or they bypass safety reviews entirely on critical files.
+> AI coding tools either spend too many tokens writing long-winded plans for simple changes, or they bypass safety reviews entirely on critical files.
 >
-> Mighty Router introduces dynamic, risk-based prompt routing. It defines four execution profiles (Light, Verify, Standard, Forensic) and uses a project-level `.mightyrc` configuration to auto-escalate the agent's logic when it interacts with high-risk paths.
+> Mighty Router is a simple, background routing framework that directs your AI (Cursor, Windsurf, Aider, CLI agents) to switch profiles based on the risk of your task:
+> - **Light:** Quick, ultra-short text responses for simple questions (saves up to 90% in tokens).
+> - **Verify:** Inspecting logs and test outputs.
+> - **Standard:** Quick 1-sentence plan for routine edits.
+> - **Forensic:** Full planning, testing, and reviews for critical files (auto-escalates via a project `.mightyrc` file).
 >
-> Features:
-> - Save 90%+ tokens on simple questions/queries (via MIGHTY-LIGHT rules).
-> - Enforce rigid XML safety planning and post-action verification on sensitive paths (via MIGHTY-FORENSIC rules).
-> - One-click global installer for terminal-based agents (Hermes, Codex, OpenClaw).
-> - Drop-in rule templates for Cursor, Windsurf, Claude Code, and Aider.
+> The repository includes drop-in templates for Cursor (`.cursorrules`), Windsurf, Claude Code, Aider, and an installer for terminal agents.
 >
-> The project is open-source. I'd love feedback on the profiles or rules design!
+> Open source: https://github.com/JOHNNYMACONNY/mighty-router
+
