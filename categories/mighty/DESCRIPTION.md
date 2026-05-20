@@ -1,9 +1,9 @@
 ---
 name: mighty
 version: 1.0.0
-description: Mighty Mouse risk-based workflow routing and execution profiles.
+description: Mighty Router risk-based workflow routing and execution profiles.
 ---
 
-# Mighty Mouse (Mighty)
+# Mighty Router (Mighty)
 
-This category contains skills related to the Mighty Mouse development harness and risk-tiering routing system.
+This category contains skills related to the Mighty Router development harness and risk-tiering routing system.

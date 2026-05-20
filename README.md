@@ -1,6 +1,6 @@
-# Mighty Mouse (Mighty Router)
+# Mighty Router
 
-**Mighty Mouse Router** is a lightweight, risk-based execution profiling framework for AI developer agents (Hermes, OpenClaw, Codex, Gemini/Antigravity) and AI-first IDEs (Cursor, VS Code Copilot, Windsurf, Claude Code, Aider).
+**Mighty Router** is a lightweight, risk-based execution profiling framework for AI developer agents (Hermes, OpenClaw, Codex, Gemini/Antigravity) and AI-first IDEs (Cursor, VS Code Copilot, Windsurf, Claude Code, Aider).
 
 By dynamically classifying developer requests into distinct risk tiers, it prevents agents from incurring unnecessary token overhead on simple tasks while enforcing strict architectural and verification gates on high-risk edits.
 
@@ -50,8 +50,8 @@ If this file is detected, the agent loads the defined paths and automatically es
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/mighty-mouse.git
-cd mighty-mouse
+git clone https://github.com/yourusername/mighty-router.git
+cd mighty-router
 ```
 
 ### 2. Run the automated installer
