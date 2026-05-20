@@ -4,13 +4,15 @@ This document contains pre-written copy, schemas, and instructions for launching
 
 ---
 
-## 1. Git Publishing Guide
-Once you create a new public repository on GitHub (e.g., `github.com/yourusername/mighty-router`), run the following commands in `/Users/bobbyinthelobby/Projects/mighty-router` to push the code:
+## 1. Git Repository
+The repository is published on GitHub at:
+[https://github.com/JOHNNYMACONNY/mighty-router](https://github.com/JOHNNYMACONNY/mighty-router)
 
+If you make local edits and wish to push them:
 ```bash
-git remote add origin https://github.com/yourusername/mighty-router.git
-git branch -M main
-git push -u origin main
+git add .
+git commit -m "your commit message"
+git push
 ```
 
 ---
@@ -25,7 +27,7 @@ If ClawHub requests a repository manifest metadata file, you can place this `cla
   "name": "mighty-router",
   "version": "1.0.0",
   "description": "Dynamic risk-based routing and execution profiles for AI coding agents.",
-  "homepage": "https://github.com/yourusername/mighty-router",
+  "homepage": "https://github.com/JOHNNYMACONNY/mighty-router",
   "author": "Bobby in the Lobby",
   "license": "MIT",
   "categories": ["mighty"],
@@ -37,7 +39,7 @@ If ClawHub requests a repository manifest metadata file, you can place this `cla
 Once pushed, anyone can install the skill globally via CLI:
 ```bash
 # Add the tap
-hermes skills tap add yourusername/mighty-router
+hermes skills tap add JOHNNYMACONNY/mighty-router
 
 # Install the skill
 hermes skills install mighty-router
@@ -75,7 +77,7 @@ hermes skills install mighty-router
 > Clean, modular, and works out of the box with an automated system installer.
 > 
 > Check out the open-source code and templates here:
-> 👉 [link to github repository]
+> 👉 https://github.com/JOHNNYMACONNY/mighty-router
 
 ---
 
@@ -114,7 +116,7 @@ hermes skills install mighty-router
 >
 > Open source, free, and MIT licensed.
 >
-> **GitHub Link:** [link to github repository]
+> **GitHub Link:** https://github.com/JOHNNYMACONNY/mighty-router
 >
 > Let me know what you think or if you have ideas on expanding the profiles!
 

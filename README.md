@@ -50,7 +50,7 @@ If this file is detected, the agent loads the defined paths and automatically es
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/yourusername/mighty-router.git
+git clone https://github.com/JOHNNYMACONNY/mighty-router.git
 cd mighty-router
 ```
 
