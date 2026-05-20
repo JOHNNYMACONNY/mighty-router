@@ -4,6 +4,16 @@
 
 By dynamically classifying developer requests into distinct risk tiers, it prevents agents from incurring unnecessary token overhead on simple tasks while enforcing strict architectural and verification gates on high-risk edits.
 
+## 💡 What is this in plain English?
+
+If you use AI coding assistants (like Cursor, Windsurf, or Aider), you've probably run into two problems:
+1. **Wasted Time & Money:** You ask a simple question, and the AI spends minutes writing out a massive, expensive explanation/plan you didn't need.
+2. **Reckless Bugs:** You ask the AI to modify a critical part of your app, and it immediately writes code into your files without thinking through potential regressions or double-checking its work.
+
+**Mighty Router fixes this.** It runs in the background and instructs your AI:
+* *"For simple questions or small edits, keep it short, cheap, and fast."*
+* *"For edits to important files (like databases or APIs), slow down, write a safety plan, and verify it works."*
+
 ---
 
 ## The Core Concept: Risk-Based Routing
