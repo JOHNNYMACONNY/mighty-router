@@ -3,13 +3,11 @@
 **Status:** Required alongside Review-12 design  
 **Date:** 2026-09-16
 
-This amendment changes only specialist/repair result schema details. All other Review-12 requirements remain unchanged.
+This amendment overrides only the specialist/repair result details below. All other Review-12 requirements remain unchanged.
 
 ## 1. Worker result is status-dependent
 
-A blocked worker may have no commit. The canonical worker result schema is:
-
-### Implemented
+### Implemented worker
 
 ```json
 {
@@ -28,10 +26,10 @@ A blocked worker may have no commit. The canonical worker result schema is:
 
 Rules:
 
-- `commit` is required and exactly a Git commit SHA accepted by controller Git verification.
-- `reported_tests` is informational only and never proves verification.
+- `commit` is required and must resolve as a Git commit during controller verification.
+- `reported_tests` is informational only and never proves controller verification.
 
-### Blocked
+### Pre-implementation blocked worker
 
 ```json
 {
@@ -54,30 +52,32 @@ Rules:
 
 Rules:
 
-- `commit` must be `null` for a pre-implementation blocker.
+- `commit` must be `null`.
 - `blocker.code` and `blocker.message` are required bounded strings.
-- A blocked worker result never enters worker commit verification and transitions according to controller blocker policy.
-- If a worker made a commit and then encountered a later blocker, it must still use `status:"implemented"` and describe the blocker/limitation in `known_limitations`; the controller independently decides whether verification can proceed.
+- After normal settled/finalizing turn archival, a blocked worker transitions **atomically from WORKING to BLOCKED** when the lease is cleared. It never enters `VERIFYING_WORK` and `verifyWorker` is never invoked.
+- If a worker already created a commit and then encountered a later limitation, it uses `status:"implemented"`; the limitation belongs in `known_limitations` and independent verification decides whether the commit is usable.
+
+This worker-blocked transition overrides the generic Review-12 `WORKING -> VERIFYING_WORK` transition for `status:"blocked"` only.
 
 ## 2. Reviewer result consistency
 
-Reviewer `confidence` must be a finite number in `[0,1]` without coercion.
+Reviewer `confidence` must be a finite numeric value in `[0,1]` without coercion.
 
 ### PASS
 
-- may have zero findings,
-- every finding must be `severity: MINOR|INFO`,
+- may contain zero findings,
+- every finding must have severity `MINOR` or `INFO`,
 - every finding must have `material:false`.
 
 ### FAIL
 
-- must contain at least one finding with `material:true` and severity `BLOCKER|IMPORTANT`, **or** an explicit top-level `blocker` object when the review itself cannot complete,
-- a FAIL with only non-material MINOR/INFO findings is invalid evidence,
-- a PASS with any material/BLOCKER/IMPORTANT finding is invalid evidence.
+- must contain at least one `material:true` finding of severity `BLOCKER` or `IMPORTANT`, **or** a top-level `blocker` object when the review itself cannot complete,
+- FAIL containing only non-material MINOR/INFO findings is invalid evidence,
+- PASS containing any material/BLOCKER/IMPORTANT finding is invalid evidence.
 
 Review-verification rejects contradictory verdict/findings instead of guessing intent.
 
-## 3. Arbiter result schema
+## 3. Arbiter result and second-failure routing
 
 Canonical arbiter result minimum:
 
@@ -96,9 +96,16 @@ Canonical arbiter result minimum:
 }
 ```
 
-- `decision` cannot widen immutable task scope/path/policy.
-- `status:"blocked"` requires `decision:"block"`.
-- `retry_strong` is only legal in controller state that permits the strong-worker escalation path.
+Rules:
+
+- second material review failure always launches fresh `ORCH_ESCALATE_1` arbiter,
+- `decision:"retry_strong"` -> controller transitions to WORKING and the next worker uses `WORK_STRONG`,
+- `decision:"replan"` -> controller transitions to `REPLAN_REQUIRED` and launches no worker,
+- `decision:"block"` or `status:"blocked"` -> controller transitions to `BLOCKED` and launches no worker,
+- `status:"blocked"` requires `decision:"block"`,
+- any decision attempting to widen immutable task scope/path/policy is invalid evidence.
+
+These rules override any shorthand Review-12 wording that implies every second-failure arbiter must necessarily produce a strong-worker retry.
 
 ## 4. Repair ticket minimum
 
