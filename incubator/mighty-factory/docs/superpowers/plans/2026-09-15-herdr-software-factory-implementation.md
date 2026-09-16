@@ -2,156 +2,209 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a dependency-free local Node.js controller that lets a Codex orchestrator run a bounded Herdr worker/reviewer loop with deterministic routing, durable state, unique turn correlation, independent verification, and no implicit merge/deploy authority.
+**Goal:** Build a dependency-free local Node.js controller that lets a Luna-Max Codex foreman run bounded fresh worker/reviewer/arbiter turns through Herdr with real model/effort gear activation, pinned Git identity, durable correlated handoffs, independent verification, and no implicit merge/deploy authority.
 
-**Architecture:** The conversational Codex agent owns planning and judgment; the Mighty Factory controller owns lifecycle state, correlation IDs, routing, Herdr provisioning, artifact validation, Git verification, retry limits, and completion eligibility. Herdr remains the terminal/process transport. Antigravity is the default worker role, Cline is the default reviewer role, and provider/model/effort details are isolated behind configurable launch adapters.
+**Architecture:** The conversational Codex agent owns planning and judgment. The Mighty Factory controller owns authority, lifecycle state, exact gear activation, turn correlation, Git worktrees, Herdr process launch, artifact ingestion, verification, escalation limits, and DONE eligibility. Worker/reviewer/arbiter specialists are fresh per turn so a gear change actually launches a different configured model/effort instead of merely changing a label.
 
-**Tech Stack:** Node.js >= 20, ECMAScript modules, built-in `node:test`, built-in `fs`, `path`, `child_process`, `crypto`; no runtime dependencies in v0.1.
+**Tech Stack:** Node.js >= 20, ECMAScript modules, built-in `node:test`, `fs`, `path`, `child_process`, `crypto`, and native Git. No runtime dependencies in v0.1.
 
 **Spec:** `incubator/mighty-factory/docs/superpowers/specs/2026-09-15-herdr-software-factory-design.md`
 
 ## Global Constraints
 
-- Work only inside `incubator/mighty-factory/` on branch `incubator/mighty-factory-v0` until the project is deliberately extracted.
-- Do not modify `mighty-router` mainline behavior or `universal-agent-loop`.
-- Node runtime must remain dependency-free in v0.1.
-- Use `node:test` and TDD for every behavior change.
-- PLAN mode is non-mutating; only exact `/execute` grants execution authority in v0.1.
-- `/cancel` prevents the next mutation-capable transition.
-- Controller code, not model memory, owns lifecycle transitions, retry counts, stale-evidence invalidation, and DONE eligibility.
-- Terminal scrollback is diagnostic only; structured handoffs live under the configured run-state root.
-- Worker and reviewer results must echo controller-generated `run_id`, `task_id`, and `turn_id`.
-- Reviewer is logically read-only; detected reviewer mutation invalidates the review.
-- Worker-reported tests are informative only; controller-run verification commands are authoritative.
-- No implicit merge to main, deploy, production mutation, credential mutation, billing action, or permission-dialog approval.
-- Herdr creation commands return JSON; parse returned IDs rather than predicting workspace/pane IDs.
-- Do not intentionally prompt a Herdr agent while it is `working`; `blocked` and `unknown` never count as successful completion.
-- A timeout or `agent_prompt_stalled` does not prove input was not delivered; inspect state/artifacts before any retry.
+- Work only inside `incubator/mighty-factory/` on branch `incubator/mighty-factory-v0`.
+- Do not modify Mighty Router mainline behavior or `universal-agent-loop`.
+- Use TDD for every behavior change: RED -> GREEN -> refactor.
+- Node runtime remains dependency-free.
+- PLAN is non-mutating; only exact `/execute` grants execution authority.
+- Only exact `/cancel` cancels before the next mutation-capable transition.
+- Resolve `base_ref` once to immutable `base_sha`; all verification/review uses `base_sha`.
+- Every worker/reviewer/arbiter turn is fresh and records the exact launch gear/argv.
+- All policy-reachable gears must have concrete `launch.resolved: true` launch specs.
+- Never silently fall back to provider default model/effort for a named gear.
+- Code-changing task contracts must contain authoritative verification commands.
+- Terminal scrollback is diagnostic only.
+- Worker/reviewer results use worktree-local outboxes and are ingested into external durable state.
+- Reviewer uses a separate disposable review worktree pinned to the exact verified commit.
+- Reviewer tracked-file mutation invalidates review.
+- Worker-reported tests are informative only; controller-run verification is authoritative.
+- No implicit merge, deploy, production mutation, credential mutation, billing action, permission approval, reset, stash, or clean of unrelated user state.
+- Run all subprocesses with argv arrays; no user-controlled shell interpolation.
 
 ---
 
 ## File Structure
 
-Create the following focused units:
-
 ```text
 incubator/mighty-factory/
-  README.md                         user-facing setup and workflow
-  package.json                      Node/ESM metadata and scripts
-  factory.config.example.json       editable gear/provider/verification config
+  README.md
+  package.json
+  factory.config.example.json
   bin/
-    mighty-factory.js               CLI entrypoint only
+    mighty-factory.js
   src/
-    cli.js                          argv parsing and command dispatch
-    errors.js                       typed operational errors / exit mapping
-    ids.js                          run/task/turn ID generation
-    classify-schema.js              task-classification validation
-    route.js                        deterministic gear routing
-    state-machine.js                legal lifecycle transitions
-    state-store.js                  atomic durable state read/write
-    artifacts.js                    request/result schemas and artifact IO
-    config.js                       config loading and validation
-    command-runner.js               injectable subprocess primitive
+    cli.js
+    errors.js
+    ids.js
+    task-contract.js
+    classify-schema.js
+    route.js
+    config.js
+    command-runner.js
     provider-adapters/
-      index.js                      adapter registry
-      codex.js                      Codex launch-spec construction
-      cline.js                      Cline launch-spec construction
-      antigravity.js                Antigravity launch-spec construction
-    herdr.js                        Herdr CLI wrapper + response parsing
-    prepare-run.js                  worktree/workspace/pane/agent provisioning
-    git-verify.js                   Git identity / ancestry / cleanliness checks
-    verifier.js                     authoritative verification command execution
-    controller.js                   orchestration-state operations used by CLI/skill
-    doctor.js                       non-mutating environment validation
+      index.js
+      codex.js
+      cline.js
+      antigravity.js
+    state-machine.js
+    state-store.js
+    artifacts.js
+    git.js
+    verifier.js
+    herdr.js
+    turn-launcher.js
+    prepare-run.js
+    controller.js
+    doctor.js
   prompts/
-    worker.md                       bounded worker contract
-    reviewer.md                     adversarial read-only review contract
+    worker.md
+    reviewer.md
+    arbiter.md
   skills/
     mighty-factory-orchestrator/
-      SKILL.md                      PLAN/EXECUTE integration contract
+      SKILL.md
   tests/
     cli.test.js
-    ids.test.js
+    task-contract.test.js
     classify-schema.test.js
     route.test.js
+    config.test.js
+    provider-adapters.test.js
+    ids.test.js
     state-machine.test.js
     state-store.test.js
     artifacts.test.js
-    config.test.js
-    provider-adapters.test.js
-    herdr.test.js
-    prepare-run.test.js
-    git-verify.test.js
+    git.test.js
     verifier.test.js
+    herdr.test.js
+    turn-launcher.test.js
+    prepare-run.test.js
     controller.test.js
     doctor.test.js
-    fixtures/
-      herdr/
-        workspace-create.json
-        pane-split.json
-        agent-idle.json
-        agent-working.json
-        agent-blocked.json
+    contracts.test.js
+    e2e-controller.test.js
 ```
 
 ---
 
-### Task 1: Scaffold the executable package and CLI boundary
+## Task 1: Scaffold CLI, task-contract validation, and explicit command surface
 
 **Files:**
-- Create: `incubator/mighty-factory/package.json`
-- Create: `incubator/mighty-factory/bin/mighty-factory.js`
-- Create: `incubator/mighty-factory/src/cli.js`
-- Create: `incubator/mighty-factory/src/errors.js`
-- Create: `incubator/mighty-factory/tests/cli.test.js`
+- Create: `package.json`
+- Create: `bin/mighty-factory.js`
+- Create: `src/cli.js`
+- Create: `src/errors.js`
+- Create: `src/task-contract.js`
+- Create: `src/classify-schema.js`
+- Create: `tests/cli.test.js`
+- Create: `tests/task-contract.test.js`
+- Create: `tests/classify-schema.test.js`
 
 **Interfaces:**
-- Produces: `main(argv, io) -> Promise<number>` in `src/cli.js`.
-- Produces: CLI commands `help`, `doctor`, `print-config`, `route`, `prepare-run`, `transition`, `verify-worker`, `verify-review`, `status` as recognized command names; non-help commands may initially return a deterministic “not implemented” operational error until their task lands.
-- Produces: process exit codes `0` success, `1` operational failure, `2` CLI usage error.
+- `main(argv, io = { stdout: process.stdout, stderr: process.stderr }) -> Promise<number>`
+- `validateTaskContract(value) -> normalizedContract`
+- `validateClassification(value) -> normalizedClassification`
+- Exit codes: `0` success, `1` operational failure, `2` usage error.
 
-- [ ] **Step 1: Write the failing CLI smoke test**
+- [ ] **Step 1: Write failing CLI surface test**
 
 ```js
-// tests/cli.test.js
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const bin = path.join(root, 'bin', 'mighty-factory.js');
 
-test('help prints the v0.1 command surface', () => {
-  const result = spawnSync(process.execPath, [bin, 'help'], { encoding: 'utf8' });
-  assert.equal(result.status, 0);
-  assert.match(result.stdout, /mighty-factory doctor/);
-  assert.match(result.stdout, /mighty-factory prepare-run/);
-  assert.match(result.stdout, /mighty-factory transition/);
-  assert.match(result.stdout, /mighty-factory verify-worker/);
+const required = [
+  'doctor', 'print-config', 'route', 'prepare-run',
+  'dispatch-worker', 'verify-worker',
+  'dispatch-reviewer', 'verify-review',
+  'dispatch-arbiter', 'record-repair', 'transition', 'status'
+];
+
+test('help exposes every controller operation used by the orchestrator skill', () => {
+  const r = spawnSync(process.execPath, [bin, 'help'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  for (const command of required) assert.match(r.stdout, new RegExp(`mighty-factory ${command}`));
 });
 
-test('unknown command exits with usage error', () => {
-  const result = spawnSync(process.execPath, [bin, 'wat'], { encoding: 'utf8' });
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /Unknown command: wat/);
+test('unknown command exits 2', () => {
+  const r = spawnSync(process.execPath, [bin, 'wat'], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
 });
 ```
 
-- [ ] **Step 2: Run the test and confirm RED**
+- [ ] **Step 2: Write failing task-contract tests**
 
-Run:
+```js
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { validateTaskContract } from '../src/task-contract.js';
+
+const base = {
+  schema_version: 1,
+  summary: 'Add feature',
+  target_repo: '/tmp/repo',
+  base_ref: 'main',
+  allowed_paths: ['src/', 'tests/'],
+  allow_noop: false,
+  verification: {
+    policy: 'repo-checks-required',
+    commands: [
+      { command: 'npm', args: ['test'] },
+      { command: 'git', args: ['diff', '--check'] }
+    ]
+  }
+};
+
+test('accepts code task with repo-specific verification', () => {
+  assert.equal(validateTaskContract(base, { change_kind: 'feature' }).summary, 'Add feature');
+});
+
+test('rejects empty verification for code changes', () => {
+  assert.throws(() => validateTaskContract({
+    ...base,
+    verification: { policy: 'repo-checks-required', commands: [] }
+  }, { change_kind: 'feature' }), /verification/i);
+});
+
+test('rejects code task whose only check is git diff --check', () => {
+  assert.throws(() => validateTaskContract({
+    ...base,
+    verification: { policy: 'repo-checks-required', commands: [
+      { command: 'git', args: ['diff', '--check'] }
+    ] }
+  }, { change_kind: 'bugfix' }), /repository-specific/i);
+});
+```
+
+- [ ] **Step 3: Write failing classification tests**
+
+Validate the exact spec enums and `confidence` range 0..1. Reject missing/extra invalid values without coercion.
+
+- [ ] **Step 4: Run RED**
 
 ```bash
 cd incubator/mighty-factory
-node --test tests/cli.test.js
+node --test tests/cli.test.js tests/task-contract.test.js tests/classify-schema.test.js
 ```
 
-Expected: FAIL because `bin/mighty-factory.js` does not exist.
+Expected: FAIL because modules do not exist.
 
-- [ ] **Step 3: Add minimal package metadata and CLI implementation**
+- [ ] **Step 5: Implement minimal scaffold**
 
 `package.json`:
 
@@ -161,1129 +214,624 @@ Expected: FAIL because `bin/mighty-factory.js` does not exist.
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "mighty-factory": "./bin/mighty-factory.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "scripts": {
-    "test": "node --test tests/*.test.js"
-  }
+  "bin": { "mighty-factory": "./bin/mighty-factory.js" },
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test tests/*.test.js" }
 }
 ```
 
-`src/errors.js`:
+`src/errors.js` exports `UsageError` and `OperationalError(code, message, details)`.
+
+`src/cli.js` must use this literal default:
 
 ```js
-export class UsageError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'UsageError';
-  }
-}
-
-export class OperationalError extends Error {
-  constructor(code, message, details = undefined) {
-    super(message);
-    this.name = 'OperationalError';
-    this.code = code;
-    this.details = details;
-  }
-}
+export async function main(
+  argv,
+  io = { stdout: process.stdout, stderr: process.stderr }
+) { /* command dispatch */ }
 ```
 
-`src/cli.js` must expose `main(argv, io = { stdout, stderr })`, print a fixed usage block for `help`, throw/handle `UsageError` for unknown commands, and reserve all v0.1 command names.
+No bare undefined `stdout` or `stderr` identifiers.
 
-`bin/mighty-factory.js` must be a thin executable wrapper with a shebang, call `main(process.argv.slice(2))`, and set `process.exitCode` from the returned integer.
+Reserve all required command names immediately. Unimplemented reserved commands return `OperationalError('not_implemented', ...)`, not usage error.
 
-- [ ] **Step 4: Run the focused test and full suite**
+- [ ] **Step 6: Verify GREEN and commit**
 
 ```bash
-node --test tests/cli.test.js
+node --test tests/cli.test.js tests/task-contract.test.js tests/classify-schema.test.js
 npm test
-```
-
-Expected: PASS, 0 failures.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add incubator/mighty-factory/package.json \
-        incubator/mighty-factory/bin/mighty-factory.js \
-        incubator/mighty-factory/src/cli.js \
-        incubator/mighty-factory/src/errors.js \
-        incubator/mighty-factory/tests/cli.test.js
-git commit -m "feat(factory): scaffold deterministic CLI"
+git diff --check
+git add incubator/mighty-factory
+git commit -m "feat(factory): scaffold command and task contracts"
 ```
 
 ---
 
-### Task 2: Add classification validation and deterministic gear routing
+## Task 2: Implement resolved gears, provider adapters, and deterministic routing
 
 **Files:**
-- Create: `incubator/mighty-factory/src/classify-schema.js`
-- Create: `incubator/mighty-factory/src/route.js`
-- Create: `incubator/mighty-factory/tests/classify-schema.test.js`
-- Create: `incubator/mighty-factory/tests/route.test.js`
-- Modify: `incubator/mighty-factory/src/cli.js`
+- Create: `factory.config.example.json`
+- Create: `src/config.js`
+- Create: `src/route.js`
+- Create: `src/provider-adapters/index.js`
+- Create: `src/provider-adapters/codex.js`
+- Create: `src/provider-adapters/cline.js`
+- Create: `src/provider-adapters/antigravity.js`
+- Create: `tests/config.test.js`
+- Create: `tests/route.test.js`
+- Create: `tests/provider-adapters.test.js`
+- Modify: `src/cli.js`
 
 **Interfaces:**
-- Produces: `validateClassification(value) -> normalizedClassification` or throws `OperationalError('invalid_classification', ...)`.
-- Produces: `routeTask({ classification, state, config }) -> { orchestratorGear, workerGear, reviewerGear, action }`.
-- `action` is one of `plan_only | execute | require_plan | require_clarification | replan`.
+- `loadConfig(path) -> validatedConfig`
+- `routeTask({ classification, state, config }) -> { action, orchestratorGear, workerGear, reviewerGear }`
+- `buildLaunchSpec(adapterName, gear, context) -> { herdrKind, argv, env, artifactTransport }`
 
-- [ ] **Step 1: Write failing classification tests**
-
-```js
-// tests/classify-schema.test.js
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { validateClassification } from '../src/classify-schema.js';
-
-test('accepts the v0.1 classification contract', () => {
-  const value = validateClassification({
-    scope: 'normal',
-    risk: 'medium',
-    ambiguity: 'low',
-    change_kind: 'feature',
-    cross_cutting: false,
-    confidence: 0.89
-  });
-  assert.equal(value.scope, 'normal');
-  assert.equal(value.confidence, 0.89);
-});
-
-test('rejects confidence outside 0..1', () => {
-  assert.throws(() => validateClassification({
-    scope: 'normal', risk: 'medium', ambiguity: 'low',
-    change_kind: 'feature', cross_cutting: false, confidence: 1.2
-  }), /confidence/);
-});
-```
-
-- [ ] **Step 2: Write failing route tests**
-
-```js
-// tests/route.test.js
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { routeTask } from '../src/route.js';
-
-const config = { confidence_threshold: 0.75 };
-const normal = {
-  scope: 'normal', risk: 'medium', ambiguity: 'low',
-  change_kind: 'feature', cross_cutting: false, confidence: 0.9
-};
-
-test('normal implementation uses default gears', () => {
-  assert.deepEqual(routeTask({ classification: normal, state: { phase: 'READY', material_failures: 0 }, config }), {
-    orchestratorGear: 'ORCH_DEFAULT',
-    workerGear: 'WORK_DEFAULT',
-    reviewerGear: 'REVIEW_DEFAULT',
-    action: 'execute'
-  });
-});
-
-test('high risk forces strong review', () => {
-  const result = routeTask({ classification: { ...normal, risk: 'high' }, state: { phase: 'READY', material_failures: 0 }, config });
-  assert.equal(result.reviewerGear, 'REVIEW_STRONG');
-});
-
-test('low confidence blocks mutation', () => {
-  const result = routeTask({ classification: { ...normal, confidence: 0.5 }, state: { phase: 'READY', material_failures: 0 }, config });
-  assert.equal(result.action, 'require_clarification');
-});
-
-test('third material failure requires replan', () => {
-  const result = routeTask({ classification: normal, state: { phase: 'REPLAN_REQUIRED', material_failures: 3 }, config });
-  assert.equal(result.action, 'replan');
-});
-```
-
-- [ ] **Step 3: Run both files and confirm RED**
-
-```bash
-node --test tests/classify-schema.test.js tests/route.test.js
-```
-
-Expected: FAIL because modules are absent.
-
-- [ ] **Step 4: Implement minimal validators and routing rules**
-
-`validateClassification` must allow only:
+Required reachable gears:
 
 ```text
-scope: tiny | normal | broad | architectural
-risk: low | medium | high
-ambiguity: low | medium | high
-change_kind: question | docs | bugfix | feature | refactor | migration | security
-cross_cutting: boolean
-confidence: finite number 0..1
+ORCH_DEFAULT ORCH_ESCALATE_1 WORK_DEFAULT WORK_STRONG REVIEW_DEFAULT REVIEW_STRONG
 ```
-
-`routeTask` rules, in order:
-
-```text
-phase PLAN -> plan_only
-phase REPLAN_REQUIRED -> replan
-confidence < threshold OR ambiguity high -> require_clarification
-scope broad/architectural AND state.plan_confirmed !== true -> require_plan
-otherwise defaults: ORCH_DEFAULT / WORK_DEFAULT / REVIEW_DEFAULT / execute
-risk high -> REVIEW_STRONG
-material_failures >= 2 -> WORK_STRONG plus ORCH_ESCALATE_1 if config exposes both
-```
-
-Do not add probabilistic routing or token-price logic.
-
-- [ ] **Step 5: Wire `mighty-factory route` to JSON input**
-
-CLI syntax:
-
-```bash
-mighty-factory route --classification '<json>' --state '<json>' --config <path>
-```
-
-It prints exactly one JSON object to stdout and no prose on success.
-
-- [ ] **Step 6: Verify and commit**
-
-```bash
-node --test tests/classify-schema.test.js tests/route.test.js tests/cli.test.js
-npm test
-git add incubator/mighty-factory/src/classify-schema.js \
-        incubator/mighty-factory/src/route.js \
-        incubator/mighty-factory/src/cli.js \
-        incubator/mighty-factory/tests/classify-schema.test.js \
-        incubator/mighty-factory/tests/route.test.js
-git commit -m "feat(factory): add deterministic task routing"
-```
-
----
-
-### Task 3: Implement IDs, durable state, and the legal lifecycle state machine
-
-**Files:**
-- Create: `incubator/mighty-factory/src/ids.js`
-- Create: `incubator/mighty-factory/src/state-machine.js`
-- Create: `incubator/mighty-factory/src/state-store.js`
-- Create: `incubator/mighty-factory/tests/ids.test.js`
-- Create: `incubator/mighty-factory/tests/state-machine.test.js`
-- Create: `incubator/mighty-factory/tests/state-store.test.js`
-- Modify: `incubator/mighty-factory/src/cli.js`
-
-**Interfaces:**
-- Produces: `createId(prefix) -> string`, restricted to prefixes `run`, `task`, `turn`.
-- Produces: `transition(state, event, payload = {}) -> nextState`; illegal transitions throw `OperationalError('illegal_transition', ...)`.
-- Produces: `createStateStore(root)` with `initRun`, `readState`, `writeState`, `appendEvent`.
-- State writes are atomic using temp-file + rename.
-
-- [ ] **Step 1: Write failing ID and state-machine tests**
-
-```js
-// tests/ids.test.js
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { createId } from '../src/ids.js';
-
-test('creates opaque role-prefixed IDs', () => {
-  assert.match(createId('run'), /^run_[0-9a-f]{32}$/);
-  assert.match(createId('task'), /^task_[0-9a-f]{32}$/);
-  assert.match(createId('turn'), /^turn_[0-9a-f]{32}$/);
-});
-```
-
-```js
-// tests/state-machine.test.js
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { transition } from '../src/state-machine.js';
-
-const base = {
-  phase: 'PLAN', material_failures: 0, verification_stale: false,
-  review_stale: false, cancelled: false
-};
-
-test('only explicit execute moves PLAN to READY', () => {
-  const next = transition(base, 'human_execute', { task_contract_valid: true });
-  assert.equal(next.phase, 'READY');
-});
-
-test('review failure progression is bounded', () => {
-  const one = transition({ ...base, phase: 'VERIFYING_REVIEW' }, 'review_failed');
-  assert.equal(one.phase, 'REPAIR_PENDING');
-  assert.equal(one.material_failures, 1);
-
-  const two = transition({ ...one, phase: 'VERIFYING_REVIEW' }, 'review_failed');
-  assert.equal(two.phase, 'ESCALATION_PENDING');
-  assert.equal(two.material_failures, 2);
-
-  const three = transition({ ...two, phase: 'VERIFYING_REVIEW' }, 'review_failed');
-  assert.equal(three.phase, 'REPLAN_REQUIRED');
-  assert.equal(three.material_failures, 3);
-});
-
-test('illegal transitions fail closed', () => {
-  assert.throws(() => transition(base, 'review_passed'), /illegal_transition/);
-});
-```
-
-- [ ] **Step 2: Write failing atomic-store test**
-
-Use `fs.mkdtemp` under `os.tmpdir()`. Assert that `initRun` creates `run.json`, `state.json`, `events.jsonl`, and `turns/`, and that `writeState` round-trips exact JSON.
-
-- [ ] **Step 3: Run focused tests and confirm RED**
-
-```bash
-node --test tests/ids.test.js tests/state-machine.test.js tests/state-store.test.js
-```
-
-- [ ] **Step 4: Implement the state machine exactly from the approved spec**
-
-Supported phases:
-
-```text
-PLAN READY PREPARING WORKING VERIFYING_WORK REVIEWING VERIFYING_REVIEW
-REPAIR_PENDING ESCALATION_PENDING REPLAN_REQUIRED BLOCKED DONE CANCELLED
-```
-
-Required events:
-
-```text
-human_execute prepare provisioned worker_artifact_valid worker_verification_passed
-worker_verification_failed review_artifact_valid review_passed review_failed
-repair_ticket_accepted escalation_selected hard_blocker human_cancel
-```
-
-Any mutation after prior verification must set `verification_stale: true` and `review_stale: true` until fresh evidence is recorded.
-
-- [ ] **Step 5: Implement durable state store**
-
-Directory contract:
-
-```text
-<root>/<run_id>/run.json
-<root>/<run_id>/task.json
-<root>/<run_id>/classification.json
-<root>/<run_id>/state.json
-<root>/<run_id>/events.jsonl
-<root>/<run_id>/turns/
-```
-
-`appendEvent` writes one JSON object per line with controller timestamp, previous phase, event, and resulting phase.
-
-- [ ] **Step 6: Wire `transition` and `status` CLI commands**
-
-Examples:
-
-```bash
-mighty-factory transition --run run_abcd --event review_failed
-mighty-factory status --run run_abcd
-```
-
-`transition` loads current state, applies one legal transition, atomically persists it, appends one event, and prints the new state as JSON.
-
-- [ ] **Step 7: Verify and commit**
-
-```bash
-node --test tests/ids.test.js tests/state-machine.test.js tests/state-store.test.js tests/cli.test.js
-npm test
-git add incubator/mighty-factory/src/ids.js \
-        incubator/mighty-factory/src/state-machine.js \
-        incubator/mighty-factory/src/state-store.js \
-        incubator/mighty-factory/src/cli.js \
-        incubator/mighty-factory/tests/ids.test.js \
-        incubator/mighty-factory/tests/state-machine.test.js \
-        incubator/mighty-factory/tests/state-store.test.js
-git commit -m "feat(factory): persist bounded lifecycle state"
-```
-
----
-
-### Task 4: Add durable request/result artifacts and correlation validation
-
-**Files:**
-- Create: `incubator/mighty-factory/src/artifacts.js`
-- Create: `incubator/mighty-factory/tests/artifacts.test.js`
-- Modify: `incubator/mighty-factory/src/state-store.js`
-
-**Interfaces:**
-- Produces: `writeTurnRequest(store, ids, request)`.
-- Produces: `readWorkerResult(path, expected) -> result`.
-- Produces: `readReviewResult(path, expected) -> result`.
-- Produces: `assertCorrelation(artifact, expected)`.
-- `expected` includes exact `schema_version`, `run_id`, `task_id`, `turn_id`, and when applicable expected commit.
-
-- [ ] **Step 1: Write failing artifact tests**
-
-Test all of the following independently:
-
-```text
-valid worker artifact accepted
-wrong run_id rejected
-wrong turn_id rejected
-worker status must be implemented or blocked
-implemented worker requires commit
-blocked worker requires blocker
-valid reviewer PASS accepted only for expected reviewed_commit
-reviewer FAIL requires at least one material finding
-unknown schema_version rejected
-```
-
-Use exact fixtures written to a temp directory rather than mocks.
-
-- [ ] **Step 2: Run test and confirm RED**
-
-```bash
-node --test tests/artifacts.test.js
-```
-
-- [ ] **Step 3: Implement strict schemas without coercion**
-
-Worker required fields for `implemented`:
-
-```js
-{
-  schema_version: 1,
-  run_id: String,
-  task_id: String,
-  turn_id: String,
-  role: 'worker',
-  status: 'implemented',
-  commit: String,
-  summary: String,
-  reported_tests: Array,
-  known_limitations: Array
-}
-```
-
-Reviewer required fields:
-
-```js
-{
-  schema_version: 1,
-  run_id: String,
-  task_id: String,
-  turn_id: String,
-  role: 'reviewer',
-  reviewed_commit: String,
-  verdict: 'PASS' | 'FAIL',
-  findings: Array,
-  evidence_checked: Array,
-  confidence: Number
-}
-```
-
-Never rewrite stale IDs or substitute the active IDs into a malformed artifact.
-
-- [ ] **Step 4: Add atomic result-write helper for controller-owned artifacts**
-
-Controller-generated request/verification artifacts use temp-file + rename. Agent-written result files are only read after they exist and parse as complete JSON.
-
-- [ ] **Step 5: Verify and commit**
-
-```bash
-node --test tests/artifacts.test.js tests/state-store.test.js
-npm test
-git add incubator/mighty-factory/src/artifacts.js \
-        incubator/mighty-factory/src/state-store.js \
-        incubator/mighty-factory/tests/artifacts.test.js
-git commit -m "feat(factory): add correlated durable handoffs"
-```
-
----
-
-### Task 5: Add configuration and provider launch adapters
-
-**Files:**
-- Create: `incubator/mighty-factory/factory.config.example.json`
-- Create: `incubator/mighty-factory/src/config.js`
-- Create: `incubator/mighty-factory/src/provider-adapters/index.js`
-- Create: `incubator/mighty-factory/src/provider-adapters/codex.js`
-- Create: `incubator/mighty-factory/src/provider-adapters/cline.js`
-- Create: `incubator/mighty-factory/src/provider-adapters/antigravity.js`
-- Create: `incubator/mighty-factory/tests/config.test.js`
-- Create: `incubator/mighty-factory/tests/provider-adapters.test.js`
-- Modify: `incubator/mighty-factory/src/cli.js`
-
-**Interfaces:**
-- Produces: `loadConfig(path) -> validatedConfig`.
-- Produces: `buildLaunchSpec(adapterName, gear, context) -> { herdrKind, argv, env }`.
-- Routing code never emits provider CLI flags.
 
 - [ ] **Step 1: Write failing config tests**
 
-Test that config rejects:
+Test rejection for:
 
 ```text
-missing ORCH_DEFAULT / WORK_DEFAULT / REVIEW_DEFAULT / REVIEW_STRONG
+missing any reachable gear
+launch.resolved !== true
+empty model_args for reachable model-bearing gear
+empty effort_args for reachable effort-bearing gear
+ORCH_DEFAULT effort !== max
 unknown provider_adapter
-non-max ORCH_DEFAULT effort
 confidence_threshold outside 0..1
-non-array verification.commands
-relative state_root after expansion rules are applied
+relative state_root after ~ expansion
 ```
 
-- [ ] **Step 2: Write failing provider-adapter tests**
-
-Use explicit adapter-owned config mappings rather than hard-coding current provider model names into routing logic. Example test input:
+Example valid gear fixture:
 
 ```js
-const gear = {
+{
   provider_adapter: 'codex',
   herdr_kind: 'codex',
   model_alias: 'luna',
   effort: 'max',
   launch: {
+    resolved: true,
     model_args: ['--model', 'gpt-example-luna'],
-    effort_args: ['--config', 'model_reasoning_effort=max']
+    effort_args: ['--config', 'model_reasoning_effort=max'],
+    extra_args: []
   }
-};
+}
 ```
 
-Expected:
+- [ ] **Step 2: Write failing adapter test proving labels cannot lie**
 
 ```js
-{
-  herdrKind: 'codex',
-  argv: ['--model', 'gpt-example-luna', '--config', 'model_reasoning_effort=max'],
-  env: {}
-}
+test('resolved gear emits concrete model and effort argv', () => {
+  const spec = buildLaunchSpec('codex', gear, {});
+  assert.deepEqual(spec.argv, [
+    '--model', 'gpt-example-luna',
+    '--config', 'model_reasoning_effort=max'
+  ]);
+});
+
+test('unresolved gear fails closed', () => {
+  assert.throws(() => buildLaunchSpec('codex', {
+    ...gear, launch: { ...gear.launch, resolved: false }
+  }, {}), /unresolved/i);
+});
 ```
 
-Equivalent Cline and Antigravity tests use their own `launch.model_args` and `launch.effort_args`. This deliberately avoids asserting undocumented provider flags in controller code.
+- [ ] **Step 3: Write failing route tests**
 
-- [ ] **Step 3: Run tests and confirm RED**
+```js
+const normal = {
+  scope: 'normal', risk: 'medium', ambiguity: 'low',
+  change_kind: 'feature', cross_cutting: false, confidence: 0.9
+};
 
-```bash
-node --test tests/config.test.js tests/provider-adapters.test.js
+test('normal route selects default gears', () => {
+  const r = routeTask({ classification: normal, state: { phase: 'READY', material_failures: 0, plan_confirmed: true }, config });
+  assert.equal(r.workerGear, 'WORK_DEFAULT');
+  assert.equal(r.reviewerGear, 'REVIEW_DEFAULT');
+});
+
+test('second material failure selects real strong worker and arbiter path', () => {
+  const r = routeTask({ classification: normal, state: { phase: 'ESCALATION_PENDING', material_failures: 2, plan_confirmed: true }, config });
+  assert.equal(r.orchestratorGear, 'ORCH_ESCALATE_1');
+  assert.equal(r.workerGear, 'WORK_STRONG');
+  assert.equal(r.action, 'require_arbiter');
+});
 ```
 
-- [ ] **Step 4: Implement config validation and adapter registry**
-
-`factory.config.example.json` must include:
-
-```json
-{
-  "state_root": "~/.local/state/mighty-factory/runs",
-  "confidence_threshold": 0.75,
-  "gears": {
-    "ORCH_DEFAULT": {
-      "provider_adapter": "codex",
-      "herdr_kind": "codex",
-      "model_alias": "luna",
-      "effort": "max",
-      "launch": { "model_args": [], "effort_args": [] }
-    },
-    "WORK_DEFAULT": {
-      "provider_adapter": "antigravity",
-      "herdr_kind": "agy",
-      "model_alias": "flash",
-      "effort": "high",
-      "launch": { "model_args": [], "effort_args": [] }
-    },
-    "WORK_STRONG": {
-      "provider_adapter": "antigravity",
-      "herdr_kind": "agy",
-      "model_alias": "strong",
-      "effort": "high",
-      "launch": { "model_args": [], "effort_args": [] }
-    },
-    "REVIEW_DEFAULT": {
-      "provider_adapter": "cline",
-      "herdr_kind": "cline",
-      "model_alias": "review-default",
-      "effort": "high",
-      "launch": { "model_args": [], "effort_args": [] }
-    },
-    "REVIEW_STRONG": {
-      "provider_adapter": "cline",
-      "herdr_kind": "cline",
-      "model_alias": "review-strong",
-      "effort": "high",
-      "launch": { "model_args": [], "effort_args": [] }
-    }
-  },
-  "verification": {
-    "commands": []
-  }
-}
-```
-
-The example intentionally leaves raw provider launch args empty until the user confirms exact CLI flags on the local installed versions.
-
-- [ ] **Step 5: Wire `print-config` to emit resolved validated JSON**
-
-```bash
-mighty-factory print-config --config ./factory.config.json
-```
-
-Must never print secrets from inherited environment.
-
-- [ ] **Step 6: Verify and commit**
+- [ ] **Step 4: Run RED, implement, wire `route`/`print-config`, verify GREEN**
 
 ```bash
 node --test tests/config.test.js tests/provider-adapters.test.js tests/route.test.js
 npm test
-git add incubator/mighty-factory/factory.config.example.json \
-        incubator/mighty-factory/src/config.js \
-        incubator/mighty-factory/src/provider-adapters \
-        incubator/mighty-factory/src/cli.js \
-        incubator/mighty-factory/tests/config.test.js \
-        incubator/mighty-factory/tests/provider-adapters.test.js
-git commit -m "feat(factory): add configurable provider gears"
+git diff --check
+git commit -am "feat(factory): add resolved gear routing"
 ```
+
+The example config must use obviously synthetic provider IDs and explain that the user must replace them with locally confirmed CLI model IDs before `doctor` passes execution readiness.
 
 ---
 
-### Task 6: Add Git identity checks and authoritative verification execution
+## Task 3: Implement IDs, durable state, and bounded lifecycle
 
 **Files:**
-- Create: `incubator/mighty-factory/src/command-runner.js`
-- Create: `incubator/mighty-factory/src/git-verify.js`
-- Create: `incubator/mighty-factory/src/verifier.js`
-- Create: `incubator/mighty-factory/tests/git-verify.test.js`
-- Create: `incubator/mighty-factory/tests/verifier.test.js`
+- Create: `src/ids.js`
+- Create: `src/state-machine.js`
+- Create: `src/state-store.js`
+- Create: `tests/ids.test.js`
+- Create: `tests/state-machine.test.js`
+- Create: `tests/state-store.test.js`
+- Modify: `src/cli.js`
 
 **Interfaces:**
-- Produces: `runCommand(command, args, options) -> { exitCode, stdout, stderr }` without shell interpolation by default.
-- Produces: `verifyGitIdentity({ repo, base, reportedCommit, allowNoop }, runner) -> evidence`.
-- Produces: `runVerificationCommands({ cwd, commands }, runner) -> commandEvidence[]`.
-- Produces: `verifyWorkerCommit(...) -> verificationArtifact` bound to exact commit SHA.
+- `createId('run'|'task'|'turn') -> prefix_<32 hex>`
+- `transition(state, event, payload) -> nextState`
+- `createStateStore(root) -> { initRun, readRun, readState, writeState, appendEvent, turnDir }`
 
-- [ ] **Step 1: Write failing Git verification tests using a real temp Git repo**
-
-Create a temp repo with `git init`, configure synthetic local username/email, make base commit, make child commit, then assert:
-
-```text
-reported commit exists
-HEAD must equal reported commit
-base must be ancestor of reported commit
-base-to-head diff must be non-empty unless allowNoop true
-clean-worktree policy is observable
-wrong commit fails
-unrelated commit fails ancestry
-```
-
-Do not mock Git semantics.
-
-- [ ] **Step 2: Write failing verifier tests with an injected runner**
-
-Example:
+- [ ] **Step 1: Write failing state-machine tests**
 
 ```js
-test('authoritative verification records real exit codes and fails closed', async () => {
-  const calls = [];
-  const runner = async (command, args, options) => {
-    calls.push({ command, args, cwd: options.cwd });
-    return command === 'npm'
-      ? { exitCode: 0, stdout: 'ok', stderr: '' }
-      : { exitCode: 1, stdout: '', stderr: 'bad' };
-  };
+const base = {
+  phase: 'PLAN', material_failures: 0,
+  verification_stale: false, review_stale: false
+};
 
-  const result = await runVerificationCommands({
-    cwd: '/repo',
-    commands: [
-      { command: 'npm', args: ['test'] },
-      { command: 'node', args: ['--check', 'src/a.js'] }
-    ]
-  }, runner);
+test('PLAN requires valid explicit execute', () => {
+  assert.equal(transition(base, 'human_execute', { contract_valid: true }).phase, 'READY');
+  assert.throws(() => transition(base, 'human_execute', { contract_valid: false }), /illegal_transition/);
+});
 
-  assert.equal(result[0].exit_code, 0);
-  assert.equal(result[1].exit_code, 1);
+test('review failures are bounded', () => {
+  const one = transition({ ...base, phase: 'VERIFYING_REVIEW' }, 'review_failed');
+  const two = transition({ ...one, phase: 'VERIFYING_REVIEW' }, 'review_failed');
+  const three = transition({ ...two, phase: 'VERIFYING_REVIEW' }, 'review_failed');
+  assert.equal(one.phase, 'REPAIR_PENDING');
+  assert.equal(two.phase, 'ESCALATION_PENDING');
+  assert.equal(three.phase, 'REPLAN_REQUIRED');
+});
+
+test('repair dispatch invalidates old evidence', () => {
+  const next = transition({ ...base, phase: 'REPAIR_PENDING', verification_stale: false, review_stale: false }, 'repair_ticket_accepted');
+  assert.equal(next.phase, 'WORKING');
+  assert.equal(next.verification_stale, true);
+  assert.equal(next.review_stale, true);
 });
 ```
 
-- [ ] **Step 3: Run tests and confirm RED**
+- [ ] **Step 2: Write atomic state-store tests using `fs.mkdtemp`**
+
+Require `run.json`, `task.json`, `classification.json`, `state.json`, `events.jsonl`, and `turns/`. State writes use temp-file + rename.
+
+- [ ] **Step 3: Run RED, implement exact legal transitions, wire `transition`/`status`, verify GREEN**
 
 ```bash
-node --test tests/git-verify.test.js tests/verifier.test.js
+node --test tests/ids.test.js tests/state-machine.test.js tests/state-store.test.js
+npm test
+git diff --check
+git commit -am "feat(factory): persist bounded controller state"
 ```
 
-- [ ] **Step 4: Implement subprocess and Git verification**
+---
 
-`command-runner.js` uses `spawn`/`spawnSync` argument arrays, never concatenated user-controlled shell strings.
+## Task 4: Implement pinned Git identity, outbox transport, and correlated artifacts
 
-Verification artifact must contain:
+**Files:**
+- Create: `src/git.js`
+- Create: `src/artifacts.js`
+- Create: `tests/git.test.js`
+- Create: `tests/artifacts.test.js`
+
+**Interfaces:**
+- `resolveBaseSha(repo, baseRef, runner) -> sha`
+- `createTaskWorktree({ repo, baseSha, branch, path }, runner)`
+- `createReviewWorktree({ repo, commit, path }, runner)`
+- `ensureOutboxExcluded(worktree, runner)`
+- `getOutboxResultPath(worktree, turnId, role) -> absolute path`
+- `ingestResult({ sourcePath, destinationPath, expected }) -> { artifact, sha256 }`
+- `assertCorrelation(artifact, expected)`
+
+- [ ] **Step 1: Write real-temp-repo test proving base ref is pinned**
+
+Create `main` at commit A, call `resolveBaseSha`, advance `main` to B, and assert stored `baseSha === A` is still used for subsequent worktree creation and diff verification.
+
+- [ ] **Step 2: Write outbox test using `git rev-parse --git-path info/exclude`**
+
+Assert `.mighty-factory-outbox/` becomes locally ignored without modifying tracked `.gitignore`.
+
+- [ ] **Step 3: Write correlation tests**
+
+Accept only exact `schema_version`, `run_id`, `task_id`, `turn_id`, role, and expected commit. Reject stale turn IDs and mismatched commits.
+
+- [ ] **Step 4: Implement worker/reviewer/arbiter schemas**
+
+Worker `implemented` requires `commit`, `summary`, `reported_tests`, `known_limitations`.
+
+Reviewer requires `reviewed_commit`, `PASS|FAIL`, findings, evidence, confidence.
+
+Arbiter requires `decision`, `repair_strategy`, confidence.
+
+- [ ] **Step 5: Run/commit**
+
+```bash
+node --test tests/git.test.js tests/artifacts.test.js
+npm test
+git diff --check
+git commit -am "feat(factory): pin git identity and ingest outbox artifacts"
+```
+
+---
+
+## Task 5: Implement authoritative verification from the task contract
+
+**Files:**
+- Create: `src/command-runner.js`
+- Create: `src/verifier.js`
+- Create: `tests/verifier.test.js`
+
+**Interfaces:**
+- `runCommand(command, args, options) -> { exitCode, stdout, stderr }`
+- `verifyWorker({ run, task, turn, reportedCommit }, deps) -> verificationArtifact`
+
+- [ ] **Step 1: Write failing test proving worker-reported PASS cannot satisfy verification**
+
+Use a real temp Git repo and injected command runner. Worker result claims `npm test` passed; controller runner returns exit 1. Expected verification result is `fail`.
+
+- [ ] **Step 2: Write failing test proving task.json commands are authoritative**
 
 ```js
-{
-  schema_version: 1,
-  run_id,
-  task_id,
-  turn_id,
-  verified_commit,
-  git: {
-    commit_exists: true,
-    head_matches: true,
-    base_is_ancestor: true,
-    diff_nonempty: true,
-    worktree_clean: true
-  },
-  commands: [
-    { command: 'npm', args: ['test'], exit_code: 0, stdout_tail: '...', stderr_tail: '' }
-  ],
-  result: 'pass' | 'fail'
-}
+const task = {
+  verification: {
+    policy: 'repo-checks-required',
+    commands: [
+      { command: 'npm', args: ['test'] },
+      { command: 'git', args: ['diff', '--check'] }
+    ]
+  }
+};
 ```
 
-Cap stored stdout/stderr tails to a deterministic maximum such as 16 KiB each to avoid unbounded state files.
+Assert both commands execute in the task worktree and exact exit codes are recorded.
 
-- [ ] **Step 5: Ensure mutation makes old evidence stale**
+- [ ] **Step 3: Implement verification**
 
-Controller/state-machine integration must clear active verification/review references or set stale flags before the next worker repair turn.
+Verification must check:
 
-- [ ] **Step 6: Verify and commit**
+```text
+reported commit exists
+HEAD == reported commit
+base_sha is ancestor
+base-to-head diff nonempty unless allow_noop
+worktree tracked/untracked policy
+all authoritative task commands run independently
+```
+
+Persist at most 16 KiB stdout/stderr tails per command.
+
+- [ ] **Step 4: Verify/commit**
 
 ```bash
-node --test tests/git-verify.test.js tests/verifier.test.js tests/state-machine.test.js
+node --test tests/verifier.test.js tests/git.test.js
 npm test
-git add incubator/mighty-factory/src/command-runner.js \
-        incubator/mighty-factory/src/git-verify.js \
-        incubator/mighty-factory/src/verifier.js \
-        incubator/mighty-factory/tests/git-verify.test.js \
-        incubator/mighty-factory/tests/verifier.test.js
-git commit -m "feat(factory): independently verify worker evidence"
+git diff --check
+git commit -am "feat(factory): verify exact worker commits independently"
 ```
 
 ---
 
-### Task 7: Wrap Herdr safely and provision isolated runs
+## Task 6: Implement Herdr wrapper and fresh per-turn launch
 
 **Files:**
-- Create: `incubator/mighty-factory/src/herdr.js`
-- Create: `incubator/mighty-factory/src/prepare-run.js`
-- Create: `incubator/mighty-factory/tests/herdr.test.js`
-- Create: `incubator/mighty-factory/tests/prepare-run.test.js`
-- Create: `incubator/mighty-factory/tests/fixtures/herdr/workspace-create.json`
-- Create: `incubator/mighty-factory/tests/fixtures/herdr/pane-split.json`
-- Create: `incubator/mighty-factory/tests/fixtures/herdr/agent-idle.json`
-- Create: `incubator/mighty-factory/tests/fixtures/herdr/agent-working.json`
-- Create: `incubator/mighty-factory/tests/fixtures/herdr/agent-blocked.json`
+- Create: `src/herdr.js`
+- Create: `src/turn-launcher.js`
+- Create: `tests/herdr.test.js`
+- Create: `tests/turn-launcher.test.js`
 
 **Interfaces:**
-- Produces `createHerdrClient(runner)` with methods `workspaceCreate`, `worktreeCreate`, `paneSplit`, `agentStart`, `agentGet`, `agentPrompt`, `agentWait`, `agentRead`.
-- Produces `awaitSettledAgent(client, target, timeoutMs)` returning only `idle` or `done`; `blocked` throws immediately; `unknown` is never success.
-- Produces `prepareRun({ repo, baseRef, branchName, gearSpecs, run }, deps) -> provisioningRecord`.
+- `createHerdrClient(runner)` with `workspaceCreate`, `paneSplit`, `agentStart`, `agentGet`, `agentPrompt`, `agentWait`, `agentRead`.
+- `launchFreshTurn({ role, gearName, cwd, prompt, resultPath, run }, deps) -> launchRecord`
 
-- [ ] **Step 1: Capture fixture shapes from current Herdr documentation**
+- [ ] **Step 1: Write Herdr JSON parsing tests**
 
-Use the documented response locations exactly:
+Fixtures are synthetic. Parse returned workspace/root pane/agent IDs. `blocked` throws immediately. `working` requires settle wait. `unknown` is not success.
+
+- [ ] **Step 2: Write gear-activation regression test**
+
+Launch worker turn 1 with `WORK_DEFAULT`, then worker turn 2 with `WORK_STRONG`.
+
+Assert two distinct `agent start` calls contain the two distinct concrete launch argv arrays and distinct agent names/turn IDs. This test exists specifically to prevent “gear label changed but process did not.”
+
+- [ ] **Step 3: Write arbiter launch test**
+
+When `ORCH_ESCALATE_1` is selected, assert a fresh Codex process is launched with that gear's concrete argv. It must not reuse or relabel the human-facing Luna session.
+
+- [ ] **Step 4: Implement fresh-turn naming**
+
+Use deterministic names derived from run/turn, e.g.:
 
 ```text
-workspace create -> .result.workspace, .result.tab, .result.root_pane
-pane split -> .result.pane
-successful agent start/prompt/wait -> .result.agent
+mf-worker-<runSuffix>-<turnSuffix>
+mf-reviewer-<runSuffix>-<turnSuffix>
+mf-arbiter-<runSuffix>-<turnSuffix>
 ```
 
-Fixture files contain synthetic IDs only, for example `w1`, `w1:t1`, `w1:p1`, never local machine secrets.
+Create a fresh Herdr workspace/pane rooted at the supplied cwd for each turn. Persist actual gear + argv in `turns/<turn_id>/launch.json`.
 
-- [ ] **Step 2: Write failing Herdr wrapper tests**
+- [ ] **Step 5: Handle timeout/stall safely**
 
-Cover:
+On timeout/stall, inspect expected result path and agent status. Never blindly resend unless no result exists and duplicate-turn safety is proven.
 
-```text
-JSON success parsing
-nonzero exit with JSON stderr becomes OperationalError
-workspace root pane ID comes from returned JSON
-pane split ID comes from returned JSON
-working agent causes wait before prompt
-blocked agent rejects without prompt
-unknown agent cannot satisfy settled precondition
-prompt timeout/stall is returned distinctly so caller can inspect before retry
-```
-
-Use injected runner responses; do not require Herdr in unit tests.
-
-- [ ] **Step 3: Run tests and confirm RED**
+- [ ] **Step 6: Verify/commit**
 
 ```bash
-node --test tests/herdr.test.js tests/prepare-run.test.js
-```
-
-- [ ] **Step 4: Implement Herdr CLI calls using argument arrays**
-
-Representative calls:
-
-```text
-herdr workspace create --cwd <path> --label <label> --no-focus
-herdr pane split <pane> --direction right --no-focus
-herdr agent get <target>
-herdr agent start <name> --kind <kind> --pane <pane> -- <argv...>
-herdr agent prompt <name> <text> --wait --until idle --until done --timeout <ms>
-herdr agent wait <name> --until idle --until done --timeout <ms>
-herdr agent read <name> --source recent-unwrapped --lines 120
-```
-
-For worktree creation, use the currently installed Herdr CLI syntax discovered via `herdr worktree create --help` during implementation and lock that exact argv shape in a unit test before production code calls it. This discovery step is read-only and must be committed as the concrete tested argv shape, not left dynamic at runtime.
-
-- [ ] **Step 5: Implement `prepareRun` provisioning sequence**
-
-Exact order:
-
-```text
-inspect repo/base safety
-create task branch/worktree through Herdr
-capture returned workspace/root pane/worktree path
-split reviewer pane from returned root pane
-start worker in root pane with WORK gear launch spec
-start reviewer in reviewer pane with REVIEW gear launch spec
-persist all authoritative returned IDs/paths in run.json
-transition PREPARING -> WORKING only after both agents are input-ready
-```
-
-Do not predict pane IDs and do not create a worker/reviewer in the user's original repo pane.
-
-- [ ] **Step 6: Verify and commit**
-
-```bash
-node --test tests/herdr.test.js tests/prepare-run.test.js
+node --test tests/herdr.test.js tests/turn-launcher.test.js
 npm test
-git add incubator/mighty-factory/src/herdr.js \
-        incubator/mighty-factory/src/prepare-run.js \
-        incubator/mighty-factory/tests/herdr.test.js \
-        incubator/mighty-factory/tests/prepare-run.test.js \
-        incubator/mighty-factory/tests/fixtures/herdr
-git commit -m "feat(factory): provision isolated Herdr runs"
+git diff --check
+git commit -am "feat(factory): launch fresh Herdr agents per gear turn"
 ```
 
 ---
 
-### Task 8: Build controller operations for worker dispatch, review, repair, and completion
+## Task 7: Implement run preparation and separate review worktrees
 
 **Files:**
-- Create: `incubator/mighty-factory/src/controller.js`
-- Create: `incubator/mighty-factory/tests/controller.test.js`
-- Modify: `incubator/mighty-factory/src/cli.js`
-- Modify: `incubator/mighty-factory/src/artifacts.js`
-- Modify: `incubator/mighty-factory/src/state-machine.js`
+- Create: `src/prepare-run.js`
+- Create: `tests/prepare-run.test.js`
+- Modify: `src/cli.js`
 
 **Interfaces:**
-- Produces: `createController(deps)` with operations:
+- `prepareRun({ task, classification, config }, deps) -> runRecord`
+- Preparation creates task worktree but **does not** prelaunch worker/reviewer models.
+
+- [ ] **Step 1: Write failing preparation test**
+
+Assert:
+
+```text
+base_ref resolved once to base_sha
+task worktree created from base_sha
+outbox ignored locally
+run.json stores base_ref + base_sha + worktree path
+no agent start occurs during preparation
+state ends WORKING-ready only after provisioning metadata is durable
+```
+
+Use a real temp Git repo plus fake Herdr client.
+
+- [ ] **Step 2: Implement native Git worktree creation**
+
+Use argv-array Git commands:
+
+```text
+git -C <repo> rev-parse <base_ref>^{commit}
+git -C <repo> worktree add -b <task_branch> <task_path> <base_sha>
+```
+
+For reviewer later:
+
+```text
+git -C <repo> worktree add --detach <review_path> <verified_commit>
+```
+
+This avoids depending on undocumented Herdr worktree argv while Herdr still owns agent workspaces/panes/processes.
+
+- [ ] **Step 3: Wire `prepare-run` CLI and verify/commit**
+
+```bash
+node --test tests/prepare-run.test.js
+npm test
+git diff --check
+git commit -am "feat(factory): prepare pinned isolated task runs"
+```
+
+---
+
+## Task 8: Implement controller dispatch, review, repair, and real escalation
+
+**Files:**
+- Create: `src/controller.js`
+- Create: `tests/controller.test.js`
+- Modify: `src/cli.js`
+- Modify: `src/state-machine.js`
+
+**Interfaces:**
+- `createController(deps)` with:
   - `prepareRun`
   - `dispatchWorker`
   - `verifyWorker`
   - `dispatchReviewer`
   - `verifyReview`
-  - `recordRepairTicket`
+  - `dispatchArbiter`
+  - `recordRepair`
+  - `transition`
   - `status`
-- Each dispatch creates a fresh `turn_id` and `request.json` before prompting.
-- Completion is only possible after controller verification and reviewer PASS reference the same exact commit.
 
-- [ ] **Step 1: Write failing controller happy-path test with fake Herdr and real temp state**
+- [ ] **Step 1: Write happy-path controller test**
 
 Scenario:
 
 ```text
-PLAN -> human_execute -> READY
-prepare -> PREPARING -> provisioned -> WORKING
-worker turn artifact references commit C1
-verify C1 -> REVIEWING
-reviewer PASS references C1 and did not mutate target
-controller -> DONE
+PLAN -> /execute -> READY
+prepare -> task worktree pinned at base_sha
+fresh WORK_DEFAULT worker -> commit C1 -> correlated outbox
+controller verification C1 passes
+separate review worktree pinned C1
+fresh REVIEW_DEFAULT reviewer -> PASS C1
+tracked review worktree unchanged
+DONE
 ```
 
-Assert that two different `turn_id` values were created for worker and reviewer and that DONE stores the exact verified/reviewed commit.
+Assert worker and reviewer have distinct turn IDs and launch records.
 
-- [ ] **Step 2: Write failing stale-turn regression test**
+- [ ] **Step 2: Write stale-artifact test**
 
-Create an old worker result with correct run/task but previous `turn_id`; assert it cannot advance `WORKING`.
+An old turn result with the correct run/task but previous `turn_id` cannot advance state.
 
-- [ ] **Step 3: Write failing review-mutation test**
+- [ ] **Step 3: Write reviewer-mutation test**
 
-Simulate reviewer PASS followed by changed HEAD/status/diff identity. Assert review is rejected and DONE is impossible.
+Reviewer may write designated ignored outbox only. Any tracked file change or HEAD change rejects PASS and prevents DONE.
 
-- [ ] **Step 4: Write failing repair/escalation tests**
+- [ ] **Step 4: Write real escalation test**
 
-Assert:
+Sequence two material review failures. Assert:
 
 ```text
-first material review FAIL -> REPAIR_PENDING -> new worker turn
-repair mutation marks verification/review stale
-second material review FAIL -> ESCALATION_PENDING
-third material review FAIL -> REPLAN_REQUIRED
-no fourth automatic worker dispatch occurs
+state == ESCALATION_PENDING
+controller launches fresh ORCH_ESCALATE_1 arbiter
+arbiter result is correlated and ingested
+next worker launch uses WORK_STRONG concrete argv
+old WORK_DEFAULT agent is not reused as the strong turn
 ```
 
-- [ ] **Step 5: Run test and confirm RED**
+Third material failure -> `REPLAN_REQUIRED`; a fourth automatic dispatch throws.
+
+- [ ] **Step 5: Implement CLI commands that were previously missing**
+
+Exact commands:
+
+```text
+mighty-factory dispatch-worker --run <id>
+mighty-factory verify-worker --run <id> --turn <id>
+mighty-factory dispatch-reviewer --run <id>
+mighty-factory verify-review --run <id> --turn <id>
+mighty-factory dispatch-arbiter --run <id>
+mighty-factory record-repair --run <id> --file <repair.json>
+```
+
+Each prints exactly one structured JSON object on success.
+
+- [ ] **Step 6: Verify/commit**
 
 ```bash
-node --test tests/controller.test.js
-```
-
-- [ ] **Step 6: Implement controller methods as composition only**
-
-`controller.js` must call existing units; it must not duplicate routing, state-machine, artifact, Git, or Herdr logic.
-
-Worker prompt payload must include:
-
-```text
-RUN_ID
-TASK_ID
-TURN_ID
-EXPECTED_RESULT_PATH
-TASK_CONTRACT_PATH
-WORKTREE_PATH
-```
-
-Reviewer prompt payload must include:
-
-```text
-RUN_ID
-TASK_ID
-TURN_ID
-EXPECTED_RESULT_PATH
-VERIFIED_COMMIT
-BASE_REF
-WORKER_VERIFICATION_PATH
-```
-
-On `agent_prompt_stalled`/timeout, controller checks expected artifact and current agent state before any retry. If duplicate-turn safety cannot be proven, transition to `BLOCKED`.
-
-- [ ] **Step 7: Wire CLI commands to controller**
-
-Required commands:
-
-```text
-prepare-run
-verify-worker
-verify-review
-status
-```
-
-CLI prints structured JSON and uses operational error codes on failure.
-
-- [ ] **Step 8: Verify and commit**
-
-```bash
-node --test tests/controller.test.js tests/artifacts.test.js tests/state-machine.test.js
+node --test tests/controller.test.js tests/state-machine.test.js
 npm test
-git add incubator/mighty-factory/src/controller.js \
-        incubator/mighty-factory/src/cli.js \
-        incubator/mighty-factory/src/artifacts.js \
-        incubator/mighty-factory/src/state-machine.js \
-        incubator/mighty-factory/tests/controller.test.js
-git commit -m "feat(factory): enforce worker-review controller loop"
+git diff --check
+git commit -am "feat(factory): enforce dispatch review and escalation loop"
 ```
 
 ---
 
-### Task 9: Add non-mutating doctor checks
+## Task 9: Add doctor and agent contracts
 
 **Files:**
-- Create: `incubator/mighty-factory/src/doctor.js`
-- Create: `incubator/mighty-factory/tests/doctor.test.js`
-- Modify: `incubator/mighty-factory/src/cli.js`
+- Create: `src/doctor.js`
+- Create: `tests/doctor.test.js`
+- Create: `prompts/worker.md`
+- Create: `prompts/reviewer.md`
+- Create: `prompts/arbiter.md`
+- Create: `skills/mighty-factory-orchestrator/SKILL.md`
+- Create: `tests/contracts.test.js`
+- Modify: `src/cli.js`
 
 **Interfaces:**
-- Produces: `runDoctor({ configPath, env }, deps) -> { ok, checks[] }`.
-- Every check contains `{ name, ok, message }`.
-- Doctor never installs tools, logs in providers, changes config, or launches agents.
+- `runDoctor({ configPath, env }, deps) -> { ok, checks[] }`
 
-- [ ] **Step 1: Write failing doctor tests**
+- [ ] **Step 1: Write doctor tests**
 
-Cover:
+Require checks for:
 
 ```text
-Node >= 20 check
-config parses
-required gears/adapters validate
-Git executable exists
-Herdr executable exists
-Herdr server can answer a non-mutating agent list/get-style command
-HERDR_ENV=1 requirement can be enforced by config/context
-state_root parent is writable
-invalid provider launch spec is reported, not silently ignored
+Node >= 20
+Git executable
+Herdr executable/server
+config parse
+all six reachable gears exist
+all six launch.resolved true
+adapter can build concrete nonempty model/effort argv for all gears
+state root controller-writable
+outbox can be prepared in disposable Git worktree
 ```
 
-Use injected command runner and temp filesystem.
+If provider model introspection is unavailable, check message must say `configured-not-provider-validated`, never `validated`.
 
-- [ ] **Step 2: Run and confirm RED**
+- [ ] **Step 2: Write static contract tests**
+
+Worker prompt must contain `RUN_ID`, `TASK_ID`, `TURN_ID`, `EXPECTED_RESULT_PATH`, exact worktree boundary, commit requirement, and no merge/deploy.
+
+Reviewer prompt must contain exact `BASE_SHA`, `VERIFIED_COMMIT`, separate review-worktree read-only tracked-file rule, PASS/FAIL artifact, and no repair.
+
+Arbiter prompt must contain exact escalation question, prior evidence references, correlated result, and no code mutation.
+
+Orchestrator skill must contain exact `/execute`, `/cancel`, controller owns lifecycle, fresh-turn gear activation, and never infer DONE.
+
+- [ ] **Step 3: Implement doctor and contracts, wire `doctor`, verify/commit**
 
 ```bash
-node --test tests/doctor.test.js
-```
-
-- [ ] **Step 3: Implement doctor with no side effects**
-
-Doctor output example:
-
-```json
-{
-  "ok": false,
-  "checks": [
-    { "name": "node", "ok": true, "message": "Node 20+" },
-    { "name": "herdr", "ok": false, "message": "herdr executable not found on PATH" }
-  ]
-}
-```
-
-Never claim a raw model ID is valid unless a provider exposes a supported non-mutating confirmation mechanism; v0.1 may report such aliases as “configured, not provider-validated”.
-
-- [ ] **Step 4: Wire `mighty-factory doctor` and verify**
-
-```bash
-node --test tests/doctor.test.js tests/cli.test.js
+node --test tests/doctor.test.js tests/contracts.test.js
 npm test
-```
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add incubator/mighty-factory/src/doctor.js \
-        incubator/mighty-factory/src/cli.js \
-        incubator/mighty-factory/tests/doctor.test.js
-git commit -m "feat(factory): add non-mutating environment doctor"
+git diff --check
+git commit -am "feat(factory): add readiness doctor and role contracts"
 ```
 
 ---
 
-### Task 10: Add the worker/reviewer contracts and orchestrator skill
+## Task 10: End-to-end fixture loop, README, and runtime qualification gate
 
 **Files:**
-- Create: `incubator/mighty-factory/prompts/worker.md`
-- Create: `incubator/mighty-factory/prompts/reviewer.md`
-- Create: `incubator/mighty-factory/skills/mighty-factory-orchestrator/SKILL.md`
-- Create: `incubator/mighty-factory/tests/contracts.test.js`
+- Create: `README.md`
+- Create: `tests/e2e-controller.test.js`
+- Modify: `package.json`
 
-**Interfaces:**
-- Worker contract may mutate only the task worktree and must write exactly one correlated worker result artifact.
-- Reviewer contract is read-only and must write exactly one correlated review artifact.
-- Orchestrator skill remains in PLAN until exact `/execute`; it asks controller for legal next action instead of maintaining a shadow lifecycle.
+- [ ] **Step 1: Write failing E2E happy-path test**
 
-- [ ] **Step 1: Write failing static contract tests**
-
-`tests/contracts.test.js` must read the Markdown files and assert required phrases/contracts exist, including:
+Use real temporary Git repo/state plus fake Herdr provider processes. Exercise:
 
 ```text
-worker: RUN_ID, TASK_ID, TURN_ID, EXPECTED_RESULT_PATH, do not merge, do not deploy
-reviewer: reviewed_commit, read-only, do not modify files, PASS/FAIL, evidence
-orchestrator: exact /execute, exact /cancel, controller owns state, never infer DONE
+valid task + classification
+human_execute
+base_sha pin
+prepare task worktree
+WORK_DEFAULT launch args recorded
+worker C1 outbox ingested
+controller task verification commands execute and pass
+review worktree detached at C1
+REVIEW_DEFAULT launch
+review PASS C1 ingested
+review tracked state unchanged
+DONE
 ```
 
-- [ ] **Step 2: Run and confirm RED**
+- [ ] **Step 2: Add E2E regression scenarios**
 
-```bash
-node --test tests/contracts.test.js
-```
-
-- [ ] **Step 3: Write worker contract**
-
-Worker instructions must require:
+Same file must prove:
 
 ```text
-operate only in supplied worktree
-implement only supplied task contract
-run requested local checks as useful evidence
-commit the implementation
-write worker-result.json atomically when possible
-report blocked instead of fabricating completion
-never merge/deploy/change credentials
-never alter run/task/turn IDs
+stale turn rejected
+moving base_ref after prepare does not alter base_sha
+empty code-task verification rejected before execute
+unresolved gear rejected before launch
+second review failure launches ORCH_ESCALATE_1 then WORK_STRONG with different argv
+reviewer tracked mutation blocks DONE
+third review failure stops at REPLAN_REQUIRED
 ```
 
-- [ ] **Step 4: Write reviewer contract**
+- [ ] **Step 3: Write README**
 
-Reviewer instructions must require:
+Document:
 
 ```text
-review exact verified commit/base-to-head diff
-inspect controller verification artifact
-remain read-only
-seek material defects, regressions, missing tests, authority violations
-PASS only when no material finding remains
-FAIL findings include severity/location/problem/required_fix
-write correlated review-result.json
-never repair the code directly
+what Factory does / does not do
+Node/Git/Herdr prerequisites
+how to copy example config
+how to fill exact installed provider model + effort args
+why unresolved gears fail closed
+PLAN and exact /execute
+fresh per-turn specialist model behavior
+worker outbox -> controller verification -> separate reviewer worktree
+real escalation via arbiter + strong worker
+three-failure cap
+state artifact location
+no automatic merge/deploy
 ```
 
-- [ ] **Step 5: Write orchestrator skill**
+Include a Mermaid architecture diagram.
 
-Skill flow:
-
-```text
-PLAN conversation
--> produce task contract + classification + authoritative verification commands
--> wait for exact /execute
--> invoke controller route/prepare-run
--> follow controller-reported legal next action
--> convert reviewer findings to bounded repair ticket only when controller requests it
--> use escalation gear only when controller enters ESCALATION_PENDING
--> never say complete until controller state is DONE
-```
-
-- [ ] **Step 6: Verify and commit**
-
-```bash
-node --test tests/contracts.test.js
-npm test
-git add incubator/mighty-factory/prompts \
-        incubator/mighty-factory/skills \
-        incubator/mighty-factory/tests/contracts.test.js
-git commit -m "feat(factory): define agent role contracts"
-```
-
----
-
-### Task 11: Write README, run end-to-end fixture test, and validate v0.1 completion gates
-
-**Files:**
-- Create: `incubator/mighty-factory/README.md`
-- Create: `incubator/mighty-factory/tests/e2e-controller.test.js`
-- Modify: `incubator/mighty-factory/package.json`
-
-**Interfaces:**
-- E2E test runs controller logic against a fake Herdr runner and a real temporary Git repository/state directory.
-- README documents manual model/provider config rather than pretending provider catalogs are auto-discovered.
-
-- [ ] **Step 1: Write failing end-to-end test**
-
-The test must exercise this complete sequence without real provider usage:
-
-```text
-create temp Git repo/base commit
-initialize PLAN run
-exact human_execute event
-route defaults
-fake Herdr returns worktree/pane/idle-agent JSON
-worker result for C1
-controller Git + command verification passes for C1
-review PASS for C1
-reviewer immutability check passes
-state becomes DONE
-```
-
-Then run a second scenario where a stale worker artifact uses the previous `turn_id`; assert it is rejected and cannot reach REVIEWING/DONE.
-
-- [ ] **Step 2: Run and confirm RED**
-
-```bash
-node --test tests/e2e-controller.test.js
-```
-
-- [ ] **Step 3: Add README with exact operator workflow**
-
-README sections:
-
-```text
-What Mighty Factory is
-What it deliberately does not do
-Prerequisites: Node 20+, Git, Herdr, Codex/Cline/Antigravity configured separately
-Copy factory.config.example.json -> factory.config.json
-Fill provider launch args from each installed CLI's current help/model picker
-Run doctor
-PLAN mode
-Exact /execute boundary
-Worker -> controller verification -> reviewer loop
-Repair/escalation limits
-Where durable run artifacts live
-No automatic merge/deploy
-Troubleshooting blocked/unknown/stalled agents
-```
-
-Include a Mermaid diagram equivalent to the approved architecture.
-
-- [ ] **Step 4: Add package scripts**
+- [ ] **Step 4: Package scripts**
 
 ```json
 {
@@ -1295,75 +843,7 @@ Include a Mermaid diagram equivalent to the approved architecture.
 }
 ```
 
-- [ ] **Step 5: Run the full verification matrix**
-
-```bash
-cd incubator/mighty-factory
-npm test
-npm run test:e2e
-node bin/mighty-factory.js help
-node bin/mighty-factory.js route \
-  --classification '{"scope":"normal","risk":"medium","ambiguity":"low","change_kind":"feature","cross_cutting":false,"confidence":0.9}' \
-  --state '{"phase":"READY","material_failures":0,"plan_confirmed":true}' \
-  --config ./factory.config.example.json
-```
-
-Expected:
-
-```text
-all tests: 0 failures
-E2E: happy path DONE and stale-turn regression rejected
-help: exit 0
-route: JSON selecting ORCH_DEFAULT / WORK_DEFAULT / REVIEW_DEFAULT / execute
-```
-
-- [ ] **Step 6: Perform spec-to-plan self-review before claiming v0.1 implemented**
-
-Check each approved spec gate explicitly:
-
-```text
-exact /execute boundary
-controller-generated run/task/turn IDs
-durable artifacts outside target repo
-deterministic state transitions
-bounded three-failure policy
-provider adapter isolation
-Herdr pane/worktree provisioning
-independent Git/test verification
-reviewer immutability detection
-stale evidence invalidation
-no implicit merge/deploy
-DONE only for same verified/reviewed commit
-```
-
-Any missing gate blocks completion.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add incubator/mighty-factory/README.md \
-        incubator/mighty-factory/package.json \
-        incubator/mighty-factory/tests/e2e-controller.test.js
-git commit -m "docs(factory): complete v0.1 operator workflow"
-```
-
----
-
-## Execution Order and Review Gates
-
-Execute Tasks 1 through 11 in order. After each task:
-
-1. run that task's focused tests,
-2. run `npm test`,
-3. inspect `git diff --check`,
-4. commit only the task's files,
-5. request a fresh code review before beginning the next task.
-
-Do not combine tasks to save time. The task boundaries are intentionally chosen so a reviewer can reject one subsystem without invalidating unrelated work.
-
-## Final Acceptance Gate
-
-Before calling the implementation complete, collect fresh evidence for all of the following in the same implementation HEAD:
+- [ ] **Step 5: Run full verification matrix**
 
 ```bash
 cd incubator/mighty-factory
@@ -1373,23 +853,89 @@ git diff --check
 node bin/mighty-factory.js help
 ```
 
-Additionally, on the user's Mac inside Herdr, run:
+Expected: all exit 0.
+
+- [ ] **Step 6: Self-review against canonical spec**
+
+Explicitly verify every item:
+
+```text
+exact /execute
+valid task contract required
+base_sha pinned
+six reachable gears required + resolved
+fresh worker/reviewer/arbiter launch per turn
+real ORCH_ESCALATE_1 and WORK_STRONG activation
+outbox ingestion
+separate review worktree
+correlation IDs
+independent task-command verification
+reviewer tracked immutability
+stale-evidence invalidation
+three-failure cap
+no hidden CLI controller method unreachable by the skill
+DONE same verified/reviewed commit only
+no implicit merge/deploy
+```
+
+Any missing item blocks completion.
+
+- [ ] **Step 7: Commit**
 
 ```bash
+git add incubator/mighty-factory
+git commit -m "docs(factory): complete v0.1 operator workflow and e2e gate"
+```
+
+---
+
+## Execution and Review Gates
+
+Execute Tasks 1-10 in order. After each task:
+
+1. run focused tests and observe GREEN,
+2. run `npm test`,
+3. run `git diff --check`,
+4. inspect changed files,
+5. commit only that task,
+6. request a fresh independent code review before starting the next task.
+
+Do not batch tasks together.
+
+## Final Local Acceptance Gate
+
+Before claiming code-complete at one implementation HEAD:
+
+```bash
+cd incubator/mighty-factory
+npm test
+npm run test:e2e
+git diff --check
+node bin/mighty-factory.js help
 node bin/mighty-factory.js doctor --config ./factory.config.json
 ```
 
-Then perform one provider-backed smoke run on a disposable test repository with a harmless one-file task. The provider-backed smoke run must prove:
+No completion claim without fresh output from all applicable commands.
+
+## Provider-Backed HERDR_RUNTIME_QUALIFIED Gate
+
+Unit/integration completion is not runtime qualification.
+
+On the user's Mac inside Herdr, use a disposable repository and a harmless one-file task. Fresh evidence must prove:
 
 ```text
-PLAN does not spawn agents
-/execute provisions an isolated worktree
-worker result is correlated to its turn
-controller independently verifies the exact commit
-reviewer receives and reviews that exact commit
-reviewer does not mutate the repo
-controller reports DONE only after matching verification + PASS
+PLAN does not spawn specialists
+/execute pins base_sha and prepares isolated task worktree
+WORK_DEFAULT actually launches the configured default worker model/effort
+worker result arrives through outbox and is correlated
+controller independently reruns task verification commands
+reviewer runs in separate worktree on exact verified commit
+REVIEW_DEFAULT/REVIEW_STRONG launch args match selected gear
+reviewer does not change tracked files
+forced two-failure scenario launches actual ORCH_ESCALATE_1 arbiter
+next worker turn launches actual WORK_STRONG argv, not the old default agent
+third failure stops at REPLAN_REQUIRED
 main branch remains unchanged
 ```
 
-A skipped provider-backed smoke run means the code may be unit/integration complete, but it is not yet `HERDR_RUNTIME_QUALIFIED`.
+If this provider-backed smoke run is skipped, report `UNIT_INTEGRATION_COMPLETE` at most; do not claim `HERDR_RUNTIME_QUALIFIED`.
