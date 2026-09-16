@@ -1,6 +1,6 @@
 # Mighty Factory — Herdr Multi-Agent Software Factory Design
 
-**Status:** Design candidate for user review  
+**Status:** Reviewed and corrected; ready for user design approval before implementation  
 **Date:** 2026-09-15  
 **Incubation location:** `mighty-router` branch `incubator/mighty-factory-v0` only. This design does not change Mighty Router mainline behavior and does not modify `universal-agent-loop`.
 
@@ -13,57 +13,109 @@ The first practical workflow is:
 ```text
 Human
   |
+  | PLAN conversation
   v
 Codex orchestrator (default: Luna / max effort)
   |
-  | classify + route
+  | exact /execute boundary
   v
-Antigravity worker (default: Gemini Flash / high)
+Mighty Factory controller
   |
-  | commit + tests + evidence
+  | classify + deterministic route + prepare run
   v
-Cline reviewer (default: configured ClinePass review gear)
+Antigravity worker (default configured worker gear)
   |
+  | durable result artifact + commit
+  v
+Controller verification
+  |
+  | exact commit + independently rerun checks
+  v
+Cline reviewer (default configured review gear)
+  |
+  | durable review artifact
   +---- PASS ------------------------------+
   |                                         |
-  +---- FAIL -> orchestrator -> repair -----+
-                                            |
-                                            v
-                                  orchestrator final gate
-                                            |
-                                            v
-                                          done
+  +---- FAIL -> controller state machine ---+
+                  |                          |
+                  +-> orchestrator repair ---+
+                                             v
+                                  controller final gate
+                                             |
+                                             v
+                                           done
 ```
 
 The system should optimize subscription usage without making model selection a manual chore on every task.
+
+The controller, not an LLM prompt, owns lifecycle state, correlation IDs, legal transitions, retry counts, stale-evidence invalidation, and final completion checks.
 
 ## 2. Core design decisions
 
 ### 2.1 Herdr is the transport and process control plane
 
-Do not reimplement terminal multiplexing, agent lifecycle detection, pane control, waiting, or prompt delivery.
+Do not reimplement terminal multiplexing, agent detection, pane control, worktree creation, lifecycle waiting, or prompt delivery.
 
-Mighty Factory uses Herdr's supported automation surface:
+Mighty Factory uses Herdr's supported automation surface, including:
 
+- `herdr workspace create`
+- `herdr worktree create`
+- `herdr pane split`
 - `herdr agent start`
+- `herdr agent get`
 - `herdr agent prompt`
 - `herdr agent wait`
 - `herdr agent read`
-- Herdr worktree helpers when available
 
-Herdr's own documentation recommends the CLI wrappers for simple orchestration. Raw socket access is deferred until a concrete need appears.
+Herdr's CLI wrappers are the v0.1 control surface. Raw socket access is deferred until a concrete need appears.
 
-### 2.2 The orchestrator owns the loop
+Important Herdr behavior that the design must respect:
 
-Reviewer and worker do not directly negotiate with one another.
+- `agent start` requires an already-existing shell pane; it does not create layout.
+- `agent prompt --wait` does not track a unique logical turn when the target is already working.
+- a timeout or `agent_prompt_stalled` does not prove the prompt was not delivered.
+- terminal reads are bounded snapshots, not durable application state.
 
-All material state transitions return to the orchestrator:
+Mighty Factory therefore adds its own correlation and durable artifact protocol above Herdr without replacing Herdr itself.
+
+### 2.2 The orchestrator owns judgment; the controller owns state
+
+The Codex orchestrator owns:
+
+- conversation with the human
+- task understanding
+- task classification judgment
+- architecture/planning judgment
+- conversion of reviewer findings into a bounded repair ticket
+- escalation judgment when policy explicitly requests an orchestrator decision
+
+The deterministic Mighty Factory controller owns:
+
+- run/task/turn identifiers
+- legal lifecycle transitions
+- retry counters
+- gear selection from classification + state
+- worktree/pane/agent provisioning
+- durable artifact paths
+- validation of worker/reviewer result schemas
+- verification that result IDs and commit IDs match the active run
+- verification that expected Git state exists
+- independent execution of authoritative verification commands
+- invalidation of stale verification/review evidence after mutations
+- stop conditions
+- completion eligibility
+
+Worker and reviewer do not directly negotiate with one another.
+
+Material flow is:
 
 ```text
-worker -> orchestrator -> reviewer -> orchestrator -> worker
+worker -> controller -> orchestrator -> controller -> reviewer -> controller
+                                    ^                           |
+                                    +--------- repair ----------+
 ```
 
-This prevents two specialist agents from silently changing scope or creating an uncontrolled repair loop.
+The orchestrator may provide judgment inputs, but it cannot directly force an illegal state transition.
 
 ### 2.3 Model choice and effort choice are policy, not vibes
 
@@ -71,17 +123,17 @@ The orchestrator may classify a task, but it does not freely invent a provider/m
 
 A deterministic router maps classification + loop state into one of a small set of named **gears**.
 
-Example concepts:
+Conceptual gears:
 
 ```text
-ORCH_DEFAULT      Codex Luna, max
+ORCH_DEFAULT      Codex default orchestration model, max effort
 ORCH_ESCALATE_1   stronger Codex gear, configured effort
 ORCH_ESCALATE_2   strongest normal Codex gear, configured effort
 
-WORK_DEFAULT      Antigravity Gemini Flash, high
-WORK_STRONG       alternate stronger worker gear
+WORK_DEFAULT      default Antigravity worker gear
+WORK_STRONG       stronger worker gear
 
-REVIEW_DEFAULT    ClinePass review gear
+REVIEW_DEFAULT    default ClinePass review gear
 REVIEW_STRONG     stronger cross-family review gear
 ```
 
@@ -89,22 +141,26 @@ Exact provider model identifiers stay in user-editable config because catalogs a
 
 ### 2.4 Luna's default orchestration effort is fixed at max
 
-For the user's current usage economics, Luna is cheap enough that reducing its reasoning effort creates little value. `ORCH_DEFAULT` therefore always uses max effort.
+For the user's current usage economics, the default Luna orchestration gear is intentionally fixed at max effort.
 
-Dynamic effort selection applies only to gears where the user actually benefits from trading usage for capability.
+Dynamic effort selection applies only to escalation gears where the user benefits from trading usage for capability.
 
-### 2.5 Planning and execution are separate modes
+The router chooses a named gear. It never separately improvises model + effort combinations at runtime.
+
+### 2.5 PLAN and EXECUTE are separate authority modes
 
 Mighty Factory must not spawn implementation workers because a conversation merely sounds implementation-adjacent.
 
 Default behavior:
 
-- **PLAN mode:** human + orchestrator only. Brainstorm, inspect, clarify, design, create a task contract.
-- **EXECUTE mode:** entered only after explicit human authorization such as `execute`, `build it`, or an equivalent command recognized by the skill.
+- **PLAN mode:** human + orchestrator only. Brainstorm, inspect, clarify, design, and create a task contract.
+- **EXECUTE mode:** entered only after the human sends the exact command `/execute` in v0.1.
 
-The orchestrator may say that a plan appears executable, but it cannot cross the boundary by itself in v0.1.
+`build it`, `go for it`, `fix it`, or inferred intent do **not** cross the mutation boundary in v0.1 unless the integration layer has first converted them into a visible `/execute` request and the human sends that command.
 
-This avoids accidental token spend and accidental repository mutation during brainstorming.
+A future version may support configurable aliases, but v0.1 uses one hard boundary to avoid accidental spend and mutation.
+
+`/cancel` stops before the next mutation-capable state transition.
 
 ## 3. Influences without coupling
 
@@ -117,7 +173,6 @@ Initial roles:
 - `mighty-factory-orchestrator`
 - worker contract
 - reviewer contract
-- optional arbiter contract later
 
 Each role gets a narrow responsibility, explicit inputs, explicit outputs, and completion criteria.
 
@@ -127,9 +182,10 @@ Adopt the useful parts:
 
 - implementation and review are independent turns
 - reviewer is expected to look for failure, not rubber-stamp
-- every review finding must be grounded in observable evidence
+- every material review finding must be grounded in observable evidence
 - repair is bounded
 - repeated failure changes strategy instead of repeating the same prompt forever
+- a mutation makes previous review evidence stale
 
 Do **not** build an infinite autonomous loop.
 
@@ -148,7 +204,7 @@ Mighty Factory remains a separate project and can later integrate with UAL if th
 
 Reuse the risk-classification philosophy conceptually, but keep the first Factory router self-contained.
 
-A later integration can import Mighty Router profiles rather than duplicating them once the Factory loop proves itself.
+A later integration can import Mighty Router profiles once the Factory loop proves itself.
 
 ## 4. Task classification contract
 
@@ -176,9 +232,213 @@ Allowed initial values:
 - `cross_cutting`: boolean
 - `confidence`: `0.0..1.0`
 
-Classification is judgment. Routing is deterministic code.
+Classification is model judgment. Routing is deterministic code.
 
-## 5. Routing policy v0.1
+## 5. Run and turn correlation
+
+Every execution has controller-generated opaque identifiers:
+
+```text
+run_id   one end-to-end execution attempt
+task_id  one approved task contract within the run
+turn_id  one worker or reviewer dispatch
+```
+
+Example:
+
+```json
+{
+  "run_id": "run_01J...",
+  "task_id": "task_01J...",
+  "turn_id": "turn_01J..."
+}
+```
+
+Rules:
+
+1. IDs are generated by the controller, never by an agent.
+2. Every worker/reviewer prompt contains the active IDs.
+3. Every durable result artifact must echo all active IDs.
+4. Every result must also identify the exact expected commit when a commit exists.
+5. Mismatched IDs are rejected as stale or unrelated output.
+6. A turn cannot satisfy another turn, even if terminal timing appears correct.
+7. Before sending a new prompt, the controller must establish that the target agent is in a settled input-ready state. It must not intentionally dispatch a new logical turn to an already-working agent.
+
+For Herdr:
+
+- if the target is `working`, wait for `idle` or `done` before dispatch
+- if the target is `blocked`, surface the block instead of prompting
+- if status is `unknown`, do not treat that as successful completion
+- only after a settled precondition is established may the controller call `agent prompt --wait`
+
+This avoids relying on Herdr's lifecycle wait as a unique-turn protocol.
+
+## 6. Durable artifact protocol
+
+Terminal scrollback is observability only. It is not the source of truth for structured handoff state.
+
+The controller creates a run artifact directory outside the target repository so result files do not dirty the user's project.
+
+Default state root:
+
+```text
+~/.local/state/mighty-factory/runs/<run_id>/
+```
+
+Config may override the root.
+
+Initial shape:
+
+```text
+<run_id>/
+  run.json
+  task.json
+  classification.json
+  state.json
+  events.jsonl
+  turns/
+    <turn_id>/
+      request.json
+      worker-result.json
+      worker-verification.json
+      review-result.json
+      review-verification.json
+```
+
+Only files relevant to a specific turn need to exist.
+
+The controller passes the exact expected result path to the agent. The agent writes that file atomically where practical and may print a short human-readable completion note to the terminal.
+
+Terminal output is never parsed as the canonical worker/reviewer JSON when the durable result artifact exists.
+
+### 6.1 Worker result schema
+
+```json
+{
+  "schema_version": 1,
+  "run_id": "run_...",
+  "task_id": "task_...",
+  "turn_id": "turn_...",
+  "role": "worker",
+  "status": "implemented",
+  "commit": "<sha>",
+  "summary": "...",
+  "reported_tests": [
+    {
+      "command": "npm test",
+      "result": "pass"
+    }
+  ],
+  "known_limitations": []
+}
+```
+
+If blocked:
+
+```json
+{
+  "schema_version": 1,
+  "run_id": "run_...",
+  "task_id": "task_...",
+  "turn_id": "turn_...",
+  "role": "worker",
+  "status": "blocked",
+  "blocker": "..."
+}
+```
+
+Worker-reported tests are informative. They are not authoritative completion evidence.
+
+### 6.2 Reviewer result schema
+
+```json
+{
+  "schema_version": 1,
+  "run_id": "run_...",
+  "task_id": "task_...",
+  "turn_id": "turn_...",
+  "role": "reviewer",
+  "reviewed_commit": "<sha>",
+  "verdict": "PASS",
+  "findings": [],
+  "evidence_checked": ["base_to_head_diff", "controller_verification"],
+  "confidence": 0.93
+}
+```
+
+or:
+
+```json
+{
+  "schema_version": 1,
+  "run_id": "run_...",
+  "task_id": "task_...",
+  "turn_id": "turn_...",
+  "role": "reviewer",
+  "reviewed_commit": "<sha>",
+  "verdict": "FAIL",
+  "findings": [
+    {
+      "severity": "material",
+      "location": "src/example.ts:42",
+      "problem": "...",
+      "required_fix": "..."
+    }
+  ],
+  "evidence_checked": ["base_to_head_diff", "controller_verification"],
+  "confidence": 0.91
+}
+```
+
+Reviewer prose may accompany the artifact, but the artifact drives state transitions.
+
+## 7. Deterministic lifecycle state machine
+
+The controller owns lifecycle transitions in code. The skill/orchestrator may request an event, but it may not invent the next state.
+
+Initial states:
+
+```text
+PLAN
+READY
+PREPARING
+WORKING
+VERIFYING_WORK
+REVIEWING
+VERIFYING_REVIEW
+REPAIR_PENDING
+ESCALATION_PENDING
+REPLAN_REQUIRED
+BLOCKED
+DONE
+CANCELLED
+```
+
+Representative legal transitions:
+
+```text
+PLAN --human /execute + valid task contract--> READY
+READY --prepare--> PREPARING
+PREPARING --provisioned--> WORKING
+WORKING --valid worker artifact--> VERIFYING_WORK
+VERIFYING_WORK --verification pass--> REVIEWING
+VERIFYING_WORK --verification fail--> REPAIR_PENDING
+REVIEWING --valid review artifact--> VERIFYING_REVIEW
+VERIFYING_REVIEW --review pass + immutable target--> DONE
+VERIFYING_REVIEW --review fail #1--> REPAIR_PENDING
+VERIFYING_REVIEW --review fail #2--> ESCALATION_PENDING
+VERIFYING_REVIEW --review fail #3--> REPLAN_REQUIRED
+REPAIR_PENDING --repair ticket accepted--> WORKING
+ESCALATION_PENDING --new gear/strategy chosen--> WORKING
+any nonterminal state --hard external blocker--> BLOCKED
+any nonterminal state --human /cancel--> CANCELLED
+```
+
+The implementation must reject illegal transitions rather than silently coercing them.
+
+Retry count and material-failure count live in `state.json`, not in chat memory.
+
+## 8. Routing policy v0.1
 
 The first router should have very few rules.
 
@@ -192,26 +452,26 @@ The first router should have very few rules.
    - `REVIEW_DEFAULT`
 
 3. **Broad or architectural work**
-   - Orchestrator must produce or confirm an implementation plan before worker execution.
-   - Escalate orchestrator only if Luna reports low confidence, cannot resolve architecture, or worker/reviewer disagreement remains material.
+   - Orchestrator must produce or confirm an implementation plan before `/execute` is accepted.
+   - Escalate orchestrator only if the default orchestrator reports low confidence, cannot resolve architecture, or worker/reviewer disagreement remains material.
 
 4. **High-risk work**
-   - Force `REVIEW_STRONG` regardless of worker success.
-   - Require explicit final evidence from tests / checks relevant to the repository.
+   - Force `REVIEW_STRONG` regardless of worker self-reported success.
+   - Require explicit controller verification commands relevant to the repository.
 
 5. **Review failure**
-   - First failure: orchestrator converts reviewer findings into a bounded repair ticket for the same worker.
-   - Second consecutive material failure: reclassify and escalate one gear where policy allows it.
-   - Third material failure: stop the implementation loop and return to replanning. No fourth blind retry.
+   - First material failure: controller requests a bounded repair ticket from the orchestrator for the same worker gear unless policy says otherwise.
+   - Second consecutive material failure: controller enters `ESCALATION_PENDING`; deterministic policy bumps one permitted gear and asks the orchestrator for any needed strategy adjustment.
+   - Third material failure: controller enters `REPLAN_REQUIRED`. No fourth blind retry.
 
 6. **Low confidence before mutation**
-   - If classification confidence is below the configured threshold or ambiguity is high, do not implement yet. Ask or inspect first.
+   - If classification confidence is below the configured threshold or ambiguity is high, `/execute` is rejected until the orchestrator resolves the uncertainty and emits a new task contract/classification.
 
-## 6. Effort policy
+## 9. Effort policy
 
 Effort is attached to gears rather than selected independently every turn.
 
-This eliminates a combinatorial "which model + which effort" decision.
+This eliminates the combinatorial "which model + which effort" decision.
 
 Example configuration shape:
 
@@ -219,22 +479,26 @@ Example configuration shape:
 {
   "gears": {
     "ORCH_DEFAULT": {
-      "agent": "codex",
+      "provider_adapter": "codex",
+      "herdr_kind": "<configured-kind>",
       "model_alias": "luna",
       "effort": "max"
     },
     "ORCH_ESCALATE_1": {
-      "agent": "codex",
+      "provider_adapter": "codex",
+      "herdr_kind": "<configured-kind>",
       "model_alias": "strong",
       "effort": "high"
     },
     "WORK_DEFAULT": {
-      "agent": "agy",
+      "provider_adapter": "antigravity",
+      "herdr_kind": "<configured-kind>",
       "model_alias": "flash",
       "effort": "high"
     },
     "REVIEW_DEFAULT": {
-      "agent": "cline",
+      "provider_adapter": "cline",
+      "herdr_kind": "<configured-kind>",
       "model_alias": "review-default",
       "effort": "high"
     }
@@ -242,99 +506,175 @@ Example configuration shape:
 }
 ```
 
-The config stores aliases and launch arguments separately so model-name churn does not infect routing logic.
+The config stores aliases and launch settings separately so model-name churn does not infect routing logic.
 
-## 7. Workspace / git isolation
+## 10. Provider launch adapters
 
-Each execution gets an isolated git worktree whenever the target repository supports it.
+Routing returns only a named gear. Provider-specific argument construction lives behind adapters.
+
+Initial adapters:
+
+```text
+provider-adapters/codex.js
+provider-adapters/cline.js
+provider-adapters/antigravity.js
+```
+
+Each adapter exposes a narrow interface conceptually equivalent to:
+
+```js
+buildLaunchSpec(gear, context) -> {
+  herdrKind,
+  argv,
+  env
+}
+```
+
+Rules:
+
+- routing code never constructs provider CLI flags
+- prompts never choose raw model IDs
+- aliases resolve through config
+- an adapter must fail closed when it cannot represent a configured effort/model combination
+- `doctor` validates required adapter/config fields before execution
+- v0.1 does not attempt automatic provider model-catalog discovery
+
+## 11. Workspace and Git isolation
+
+Each execution gets an isolated Git worktree whenever the target repository supports it.
+
+The controller owns provisioning.
+
+Conceptual preparation sequence:
+
+1. inspect target repo and current Git state
+2. resolve base ref and create task branch name
+3. call `herdr worktree create` for the task branch
+4. capture the returned workspace, tab, root pane, worktree path, and branch
+5. split additional worker/reviewer panes as needed
+6. start or resolve named agents in those panes
+7. persist all returned Herdr IDs in `run.json`
+8. only then enter `WORKING`
 
 Rules:
 
 - worker writes only inside the task worktree
 - worker commits each accepted implementation unit
-- reviewer reviews the exact commit/diff under consideration
-- reviewer does not modify files in the normal path
-- a repair mutation invalidates the previous review evidence
+- reviewer reviews the exact controller-verified commit/diff
+- reviewer is instructed not to modify files
+- controller records Git status/HEAD before review and checks them again after review
+- any reviewer mutation invalidates that review and is treated as a failed review turn
+- a repair mutation invalidates previous controller verification and review evidence
 - no automatic merge to the user's main branch in v0.1
 
-The orchestrator reports the final branch/worktree and evidence to the human.
+Dirty/conflicting source repo behavior:
 
-## 8. Handoff contracts
+- do not rewrite, stash, reset, or clean the user's source repo automatically
+- Herdr worktree creation may proceed only when the controller can prove the chosen base/ref and target branch are safe
+- otherwise enter `BLOCKED` and surface the exact condition
 
-### Worker result
+## 12. Independent controller verification
 
-Worker must finish with structured evidence similar to:
+Worker claims are never sufficient for completion.
 
-```json
-{
-  "status": "implemented",
-  "commit": "<sha>",
-  "summary": "...",
-  "tests": [
-    {"command": "...", "result": "pass"}
-  ],
-  "known_limitations": []
-}
-```
+After a worker artifact passes schema/correlation validation, the controller verifies at minimum:
 
-If blocked, it says why instead of claiming completion.
+1. the reported commit exists
+2. the task worktree `HEAD` equals the reported commit
+3. the reported commit descends from the expected base according to the run contract
+4. the base-to-head diff is non-empty unless the task legitimately permits a no-op result
+5. Git status matches the task policy
+6. configured authoritative verification commands execute independently and their real exit codes are captured
+7. generated verification evidence is bound to the exact commit SHA
 
-### Reviewer result
+The task contract contains the authoritative verification commands chosen during planning or repository inspection.
 
-Reviewer returns:
+Example verification artifact:
 
 ```json
 {
-  "verdict": "PASS",
-  "findings": [],
-  "evidence_checked": ["diff", "tests"],
-  "confidence": 0.93
-}
-```
-
-or:
-
-```json
-{
-  "verdict": "FAIL",
-  "findings": [
+  "schema_version": 1,
+  "run_id": "run_...",
+  "task_id": "task_...",
+  "turn_id": "turn_...",
+  "verified_commit": "abc123",
+  "git": {
+    "head_matches": true,
+    "base_is_ancestor": true,
+    "worktree_clean": true
+  },
+  "commands": [
     {
-      "severity": "material",
-      "location": "src/example.ts:42",
-      "problem": "...",
-      "required_fix": "..."
+      "command": "npm test",
+      "exit_code": 0
     }
   ],
-  "evidence_checked": ["diff", "tests"],
-  "confidence": 0.91
+  "result": "pass"
 }
 ```
 
-Reviewer prose can accompany the object, but the object drives state transitions.
+If a worker changes code after verification, the controller marks that verification stale and requires a new verification artifact.
 
-## 9. Herdr interaction pattern
+Reviewer PASS is not eligible for `DONE` unless it references the same verified commit.
+
+## 13. Reviewer immutability check
+
+The reviewer is logically read-only in v0.1.
+
+Before review, the controller records:
+
+- expected HEAD
+- Git status
+- diff hash or equivalent exact base/head identity
+
+After review, it checks again.
+
+If the reviewer modified files, changed HEAD, or otherwise changed the target under review:
+
+- reject the review result
+- mark the review turn invalid
+- restore nothing automatically unless a future explicit safe mechanism is designed
+- enter `BLOCKED` or `REPAIR_PENDING` according to the exact condition
+
+This makes reviewer independence observable instead of purely prompt-based.
+
+## 14. Herdr dispatch protocol
 
 Mighty Factory uses named live agents so routing targets are stable.
 
-Conceptual flow:
+A logical dispatch must follow this order:
 
-```bash
-# start or resolve named agents in panes
-herdr agent start worker --kind agy --pane <pane> -- <configured args>
-herdr agent start reviewer --kind cline --pane <pane> -- <configured args>
-
-# dispatch
-herdr agent prompt worker "<worker ticket>" --wait --until idle --until done
-herdr agent read worker --source recent-unwrapped --lines 160
-
-# review
-herdr agent prompt reviewer "<review contract + commit>" --wait --until idle --until done
-herdr agent read reviewer --source recent-unwrapped --lines 160
+```text
+1. resolve target agent
+2. inspect lifecycle status
+3. if working -> wait for idle/done
+4. if blocked -> surface blocker
+5. if unknown -> refuse to infer success; inspect/wait according to policy
+6. create turn_id and request.json
+7. send prompt with run_id/task_id/turn_id/result_path
+8. use agent prompt --wait from the settled state
+9. on timeout/stall, inspect agent before any retry
+10. read durable result artifact
+11. validate IDs/schema
+12. transition through controller state machine
 ```
 
-The implementation should prefer Herdr's CLI wrappers over raw socket code in v0.1.
+Conceptual prompt:
 
-## 10. Proposed project structure
+```text
+RUN_ID: run_...
+TASK_ID: task_...
+TURN_ID: turn_...
+EXPECTED_RESULT_PATH: /Users/.../.local/state/mighty-factory/runs/run_.../turns/turn_.../worker-result.json
+
+Perform only the attached task contract.
+Write the final structured result to EXPECTED_RESULT_PATH.
+Do not invent a different run/task/turn identifier.
+```
+
+Terminal reads remain useful for diagnosis and blocker handling but do not drive successful state transitions when a durable result is expected.
+
+## 15. Proposed project structure
 
 ```text
 mighty-factory/
@@ -346,8 +686,18 @@ mighty-factory/
   src/
     classify-schema.js
     route.js
-    loop-state.js
+    state-machine.js
+    state-store.js
+    artifacts.js
     config.js
+    git-verify.js
+    verifier.js
+    herdr.js
+    prepare-run.js
+    provider-adapters/
+      codex.js
+      cline.js
+      antigravity.js
   skills/
     mighty-factory-orchestrator/
       SKILL.md
@@ -355,54 +705,80 @@ mighty-factory/
     worker.md
     reviewer.md
   tests/
+    classify-schema.test.js
     route.test.js
-    loop-state.test.js
+    state-machine.test.js
+    state-store.test.js
+    artifacts.test.js
     config.test.js
+    git-verify.test.js
+    verifier.test.js
+    provider-adapters.test.js
   docs/
     superpowers/
       specs/
       plans/
 ```
 
-Keep Node runtime dependency-free for v0.1. Use `node:test`.
+Keep the Node runtime dependency-free for v0.1 where practical. Use built-in Node modules and `node:test`.
 
-## 11. CLI scope v0.1
+If a tiny dependency becomes necessary for correctness, it requires an explicit design update rather than silently changing this constraint.
 
-Only implement what makes the orchestration observable and testable:
+## 16. CLI scope v0.1
+
+The deterministic CLI exposes enough operations to make lifecycle state observable and enforceable:
 
 ```text
-mighty-factory route --classification '<json>' --state '<json>'
 mighty-factory doctor
 mighty-factory print-config
+mighty-factory route --classification '<json>' --state '<json>'
+mighty-factory prepare-run --repo <path> --task <task.json>
+mighty-factory transition --run <run_id> --event <event> [--input <artifact-path>]
+mighty-factory verify-worker --run <run_id> --turn <turn_id>
+mighty-factory verify-review --run <run_id> --turn <turn_id>
+mighty-factory status --run <run_id>
 ```
 
-The **agent skill** owns the conversational loop and calls Herdr. The deterministic CLI owns routing and config validation.
+The **agent skill** owns conversation and judgment requests.
+
+The **CLI/controller** owns state, correlation, routing, provisioning, validation, and verification.
+
+The skill may call controller commands, but it must follow the controller's returned state/action rather than maintaining an independent hidden lifecycle in prompt memory.
 
 Do not build a daemon, database, dashboard, scheduler, remote service, or raw socket client yet.
 
-## 12. `doctor` behavior
+## 17. `doctor` behavior
 
-`doctor` should check, without mutation:
+`doctor` is non-mutating.
 
-- Node version supported
+It checks:
+
+- supported Node version
 - config parses
 - required gears exist
+- required provider adapters are known
+- each configured gear has the adapter fields required to construct a launch spec
 - `herdr` is on PATH
-- running inside Herdr when an orchestration session is expected (`HERDR_ENV=1`)
-- Herdr can list agents
-- configured role targets / launch kinds are valid enough to proceed
+- Herdr server is reachable
+- `HERDR_ENV=1` when an in-Herdr orchestration session is required
+- Herdr can list/get agents
+- Git is available
+- configured state root is writable
 
-It should report actionable failures, not try to install providers or log users in.
+It should report actionable failures, not try to install providers, log users in, purchase usage, or mutate account settings.
 
-## 13. Authority boundaries
+It does not claim a configured model identifier is valid unless the relevant provider can actually confirm that through a supported non-mutating mechanism.
 
-By default Mighty Factory may:
+## 18. Authority boundaries
 
-- inspect target repository
-- create task-local worktrees / branches
+By default Mighty Factory may, **after exact `/execute` authority**:
+
+- inspect the target repository
+- create a task-local worktree / branch
+- create Herdr panes/workspaces needed for that run
 - run configured coding agents
 - modify the task worktree through the worker
-- run tests and static checks
+- run configured tests/static checks
 - commit to the task branch
 
 By default it may **not**:
@@ -414,31 +790,82 @@ By default it may **not**:
 - approve billing / purchases
 - bypass interactive permission prompts
 - delete unrelated branches/worktrees
+- reset/stash/clean unrelated user changes
 
 Those require separate explicit authority.
 
-## 14. Failure behavior
+## 19. Failure behavior
 
-- `agent_blocked`: surface the exact blocker to the orchestrator/human. Do not spam retries.
-- `agent_prompt_stalled` / timeout: inspect agent output before deciding whether to retry, because Herdr documents that input may already have been delivered.
-- malformed worker/reviewer JSON: orchestrator may ask the same agent once to re-emit the result contract without redoing the work.
-- repeated malformed output: treat as a failed agent turn and escalate/replan according to policy.
-- dirty or conflicting target repo: stop before creating a worktree unless the isolation method is proven safe.
+### Agent blocked
 
-## 15. Completion criteria for v0.1
+`agent_blocked` or observed `blocked` state surfaces the exact blocker. Do not spam prompts or auto-answer permission dialogs.
+
+### Prompt stalled or timeout
+
+A stalled/timed-out prompt may have been delivered. Before retrying:
+
+1. inspect agent state/output
+2. check whether the expected durable result artifact appeared
+3. check whether the active turn IDs match
+4. retry only if the controller can prove doing so will not create a duplicate logical turn
+
+If that proof is unavailable, enter `BLOCKED` instead of guessing.
+
+### Missing or malformed result artifact
+
+The controller may ask the same settled agent once to re-emit the **result artifact only**, using the same run/task/turn IDs, if the underlying work is otherwise complete.
+
+A second malformed/missing result is a failed agent turn and follows normal escalation/replanning policy.
+
+### Stale or mismatched artifact
+
+Reject it. Never coerce IDs or commit SHAs to the active run.
+
+### Verification failure
+
+A controller verification failure cannot be overruled by worker prose. It becomes a repair/replan event according to policy.
+
+### Dirty/conflicting target state
+
+Stop before destructive cleanup. Surface the exact Git condition.
+
+## 20. Completion gate
+
+`DONE` requires all of the following to be simultaneously true:
+
+1. active run/task IDs are valid
+2. active worker turn produced a schema-valid, correlation-valid result
+3. reported commit exists and matches task worktree HEAD
+4. controller verification passed for that exact commit
+5. reviewer result is schema-valid and correlation-valid
+6. reviewer PASS references that same exact commit
+7. reviewer did not mutate the reviewed target
+8. no later mutation has made verification/review evidence stale
+9. retry/escalation policy is satisfied
+10. no implicit merge/deploy/production mutation occurred
+
+The orchestrator may summarize completion only after the controller reports `DONE`.
+
+## 21. Completion criteria for v0.1
 
 v0.1 is successful when, on the user's Mac inside Herdr:
 
 1. Codex can remain the conversational orchestrator in PLAN mode without spawning other agents.
-2. Explicit execution triggers one worker turn and one independent review turn.
-3. The deterministic router selects configured gears from classification + loop state.
-4. A reviewer FAIL produces one bounded repair turn through the orchestrator.
-5. Repeated failure escalates according to policy and eventually stops rather than looping forever.
-6. The exact commit and verification evidence are surfaced at completion.
-7. No main-branch merge or deployment happens implicitly.
-8. Provider model names and effort levels can be changed in config without editing routing code.
+2. Only exact `/execute` crosses into mutation-capable execution.
+3. `prepare-run` creates/opens an isolated task worktree and provisions required panes/agents deterministically.
+4. The router selects configured gears from classification + durable loop state.
+5. A worker turn is correlated with unique run/task/turn IDs and writes a durable result artifact.
+6. Controller verification independently proves Git identity and reruns authoritative verification commands.
+7. A reviewer independently reviews the exact verified commit and writes a durable review artifact.
+8. Reviewer mutation is detected and invalidates the review.
+9. A reviewer FAIL produces one bounded repair turn through the orchestrator/controller.
+10. Repeated failure escalates according to policy and eventually stops rather than looping forever.
+11. A stale terminal completion or artifact from another turn cannot satisfy the active turn.
+12. The exact commit and controller verification evidence are surfaced at completion.
+13. No main-branch merge or deployment happens implicitly.
+14. Provider model names and effort levels can be changed in config without editing routing/state-machine code.
 
-## 16. Deferred work
+## 22. Deferred work
 
 Not in v0.1:
 
@@ -452,14 +879,30 @@ Not in v0.1:
 - raw Herdr socket subscriber
 - direct UAL integration
 - autonomous PLAN -> EXECUTE mode switching
+- automatic permission-dialog approval
+- cross-machine run migration
 
-These should be added only after the basic foreman -> worker -> reviewer loop is boring and reliable.
+These should be added only after the basic foreman -> worker -> controller verification -> reviewer loop is boring and reliable.
 
-## 17. Source references
+## 23. Review corrections incorporated
 
-- Herdr socket API: https://herdr.dev/docs/socket-api/
-- Herdr CLI reference: https://herdr.dev/docs/cli-reference/
+The architecture review identified seven concrete gaps. This revision resolves them as follows:
+
+1. **Turn correlation:** controller-generated `run_id`, `task_id`, and `turn_id`; settled-agent precondition; result ID validation.
+2. **Scrollback as handoff:** canonical results moved to durable run artifacts outside the target repo; terminal output is diagnostic only.
+3. **Prompt-owned lifecycle:** explicit deterministic state machine and `transition` command now own legal next states/retry counters.
+4. **Unverified worker claims:** controller independently verifies commit ancestry/HEAD/status and reruns authoritative verification commands.
+5. **Pane provisioning gap:** `prepare-run` owns Herdr worktree/workspace/pane provisioning before agent start.
+6. **Provider flag leakage:** provider launch adapters convert named gears into Herdr kind/argv/env launch specs.
+7. **Fuzzy PLAN -> EXECUTE:** v0.1 uses exact `/execute` and `/cancel` commands only.
+
+## 24. Source references
+
+Herdr behavior used by this design should be rechecked against the installed/current Herdr version during implementation.
+
 - Herdr agent automation: https://herdr.dev/docs/agent-automation/
-- Herdr agent skill: https://herdr.dev/docs/agent-skill/
+- Herdr CLI reference: https://herdr.dev/docs/cli-reference/
+- Herdr socket API: https://herdr.dev/docs/socket-api/
+- Herdr configuration: https://herdr.dev/docs/configuration/
 - Local inspiration only: `JOHNNYMACONNY/universal-agent-loop`
 - Local routing inspiration only: `JOHNNYMACONNY/mighty-router`
